@@ -1,0 +1,11 @@
+# Exemplo de CSV para importação de funcionários
+cpf,nome,setor,funcao,email,perfil
+12345678901,João Silva,TI,Desenvolvedor,joao@empresa.com,funcionario
+23456789012,Maria Santos,RH,Analista,maria@empresa.com,funcionario
+34567890123,Pedro Costa,Financeiro,Contador,pedro@empresa.com,funcionario
+45678901234,Ana Oliveira,Marketing,Designer,ana@empresa.com,funcionario
+56789012345,Carlos Souza,Vendas,Vendedor,carlos@empresa.com,funcionario
+67890123456,Julia Ferreira,TI,DevOps,julia@empresa.com,funcionario
+78901234567,Rafael Lima,Administrativo,Assistente,rafael@empresa.com,funcionario
+89012345678,Beatriz Alves,RH,Gestora,beatriz@empresa.com,rh
+90123456789,Lucas Mendes,Diretoria,Diretor,lucas@empresa.com,admin
