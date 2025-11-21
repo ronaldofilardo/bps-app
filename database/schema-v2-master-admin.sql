@@ -1,11 +1,21 @@
--- Criação do tipo ENUM para nivel_cargo
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'nivel_cargo') THEN
-        CREATE TYPE nivel_cargo AS ENUM ('Gestao', 'Operacional');
-    END IF;
-END$$;
+-- BPS Brasil - Schema SQL v2 - Master Admin & Clínicas
+-- Compatível com Neon PostgreSQL e PostgreSQL Local
+-- Etapa 1: Criação do Master Admin
 
+-- Tabela de Clínicas (Multi-tenant)
+CREATE TABLE IF NOT EXISTS clinicas (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    cnpj CHAR(14) UNIQUE,
+    email VARCHAR(100),
+    telefone VARCHAR(20),
+    endereco TEXT,
+    ativa BOOLEAN DEFAULT TRUE,
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabela de Funcionários (atualizada com perfil master)
 CREATE TABLE IF NOT EXISTS funcionarios (
     id SERIAL PRIMARY KEY,
     cpf CHAR(11) UNIQUE NOT NULL,
@@ -15,14 +25,16 @@ CREATE TABLE IF NOT EXISTS funcionarios (
     email VARCHAR(100),
     senha_hash TEXT NOT NULL,
     perfil VARCHAR(20) DEFAULT 'funcionario' CHECK (
-        perfil IN ('funcionario', 'rh', 'admin')
+        perfil IN (
+            'funcionario',
+            'rh',
+            'admin',
+            'master'
+        )
     ),
     ativo BOOLEAN DEFAULT TRUE,
     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    nivel_cargo nivel_cargo,
-    turno VARCHAR(50),
-    escala VARCHAR(50)
+    atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Tabela de Avaliações
@@ -77,7 +89,16 @@ CREATE INDEX IF NOT EXISTS idx_respostas_avaliacao ON respostas (avaliacao_id);
 
 CREATE INDEX IF NOT EXISTS idx_resultados_avaliacao ON resultados (avaliacao_id);
 
--- Inserir usuário admin padrão (senha: admin123)
+-- SEED: Inserir clínica padrão
+INSERT INTO
+    clinicas (nome, cnpj, email)
+VALUES (
+        'BPS Brasil - Clínica Padrão',
+        '12345678000195',
+        'contato@bpsbrasil.com.br'
+    ) ON CONFLICT DO NOTHING;
+
+-- SEED: Inserir usuário Master Admin (CPF: 00000000000, senha: master123)
 INSERT INTO
     funcionarios (
         cpf,
@@ -88,13 +109,18 @@ INSERT INTO
     )
 VALUES (
         '00000000000',
-        'Administrador',
-        'admin@bps.com.br',
+        'Master Administrador',
+        'master@bpsbrasil.com.br',
         '$2a$10$Z3QK5YrKGQJN5yXZ9K5yXOK5YrKGQJN5yXZ9K5yXOK5YrKGQJN5yX',
-        'admin'
-    ) ON CONFLICT (cpf) DO NOTHING;
+        'master'
+    ) ON CONFLICT (cpf) DO
+UPDATE
+SET
+    perfil = 'master',
+    nome = 'Master Administrador',
+    email = 'master@bpsbrasil.com.br';
 
--- Inserir usuário RH padrão (senha: rh123)
+-- SEED: Inserir usuário admin padrão (senha: admin123)
 INSERT INTO
     funcionarios (
         cpf,
@@ -105,6 +131,23 @@ INSERT INTO
     )
 VALUES (
         '11111111111',
+        'Administrador Clínica',
+        'admin@bps.com.br',
+        '$2a$10$Z3QK5YrKGQJN5yXZ9K5yXOK5YrKGQJN5yXZ9K5yXOK5YrKGQJN5yX',
+        'admin'
+    ) ON CONFLICT (cpf) DO NOTHING;
+
+-- SEED: Inserir usuário RH padrão (senha: rh123)
+INSERT INTO
+    funcionarios (
+        cpf,
+        nome,
+        email,
+        senha_hash,
+        perfil
+    )
+VALUES (
+        '22222222222',
         'RH Gestor',
         'rh@bps.com.br',
         '$2a$10$H3QK5YrKGQJN5yXZ9K5yXOK5YrKGQJN5yXZ9K5yXOK5YrKGQJN5yH',

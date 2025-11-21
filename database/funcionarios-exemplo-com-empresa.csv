@@ -1,0 +1,5 @@
+cpf,nome,setor,funcao,email,perfil,empresa_id
+12312312312,José da Silva,Produção,Soldador,jose.silva@empresa.com,funcionario,1
+45645645645,Ana Costa,Administrativo,Assistente,ana.costa@empresa.com,funcionario,1
+78978978978,Pedro Santos,Manutenção,Técnico,pedro.santos@empresa.com,funcionario,2
+32132132132,Carla Oliveira,Engenharia,Engenheira,carla.oliveira@empresa.com,funcionario,2
