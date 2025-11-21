@@ -1,6 +1,6 @@
 # BPS Brasil - Sistema de Avaliação Psicossocial
 
-Sistema de avaliação psicossocial baseado no questionário COPSOQ III (versão média), com módulos integrados de Jogos de Azar (JZ) e Endividamento Financeiro (EF).
+Sistema de avaliação psicossocial baseado no questionário COPSOQ III (versão média), com módulos integrados de Jogos de Apostas e Endividamento Financeiro.
 
 ## 🚀 Características
 
@@ -126,8 +126,8 @@ Após o setup dos bancos, estão disponíveis:
 6. **Personalidade** (5 itens - opcional)
 7. **Saúde e Bem-Estar** (8 itens)
 8. **Comportamentos Ofensivos** (3 itens)
-9. **Jogos de Azar (JZ)** (6 itens)
-10. **Endividamento (EF)** (6 itens)
+9. **Jogos de Apostas** (6 itens)
+10. **Endividamento** (6 itens)
 
 ## 🚀 Deploy na Vercel
 

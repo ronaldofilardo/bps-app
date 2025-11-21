@@ -129,8 +129,9 @@ describe('AvaliacaoConcluidaPage - Relatório Completo', () => {
     render(<AvaliacaoConcluidaPage />)
 
     await waitFor(() => {
-      const botaoImprimir = screen.getByText('🖨️ Imprimir Relatório')
-      fireEvent.click(botaoImprimir)
+      const botoesImprimir = screen.getAllByText('🖨️ Imprimir')
+      expect(botoesImprimir).toHaveLength(2) // Confirma que há múltiplos botões
+      fireEvent.click(botoesImprimir[0]) // Clica no primeiro
       expect(mockPrint).toHaveBeenCalled()
     })
   })
@@ -139,7 +140,7 @@ describe('AvaliacaoConcluidaPage - Relatório Completo', () => {
     render(<AvaliacaoConcluidaPage />)
 
     await waitFor(() => {
-      const botaoVoltar = screen.getByText('🏠 Voltar ao Início')
+      const botaoVoltar = screen.getByText('← Voltar')
       fireEvent.click(botaoVoltar)
       expect(mockPush).toHaveBeenCalledWith('/dashboard')
     })

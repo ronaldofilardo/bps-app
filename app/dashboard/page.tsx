@@ -31,7 +31,7 @@ interface Resultado {
   dominio: string
   score: number
   categoria: 'baixo' | 'medio' | 'alto'
-  tipo: 'positiva' | 'negativa' | 'mista'
+  tipo: 'positiva' | 'negativa'
 }
 
 export default function DashboardPage() {
@@ -138,7 +138,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header userName={session.nome} userRole={session.perfil} />
+
       
       <main className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
         <div className="max-w-4xl mx-auto">

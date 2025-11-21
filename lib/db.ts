@@ -51,10 +51,13 @@ export async function query<T = any>(
   text: string,
   params?: any[]
 ): Promise<QueryResult<T>> {
+  const start = Date.now()
   try {
     if ((isDevelopment || isTest) && localPool) {
       // PostgreSQL Local (Desenvolvimento e Testes)
       const result = await localPool.query(text, params)
+      const duration = Date.now() - start
+      console.log(`[DEBUG] Query local (${duration}ms): ${text.substring(0, 100)}...`)
       return {
         rows: result.rows,
         rowCount: result.rowCount || 0,
@@ -62,6 +65,8 @@ export async function query<T = any>(
     } else if (isProduction && neonSql) {
       // Neon Database (Produção)
       const rows = await neonSql(text, params || [])
+      const duration = Date.now() - start
+      console.log(`[DEBUG] Query Neon (${duration}ms): ${text.substring(0, 100)}...`)
       return {
         rows: rows as T[],
         rowCount: Array.isArray(rows) ? rows.length : 0,
@@ -70,7 +75,8 @@ export async function query<T = any>(
       throw new Error(`Nenhuma conexão configurada para ambiente: ${environment}`)
     }
   } catch (error) {
-    console.error(`Erro na query do banco (${environment}):`, error)
+    const duration = Date.now() - start
+    console.error(`Erro na query do banco (${environment}, ${duration}ms):`, error)
     throw error
   }
 }

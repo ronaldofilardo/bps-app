@@ -1,6 +1,9 @@
+
 import './globals.css'
 import type { Metadata } from 'next'
 import PWAInitializer from '@/components/PWAInitializer'
+import Header from '@/components/Header'
+import { getSession } from '@/lib/session'
 
 export const metadata: Metadata = {
   title: 'BPS Brasil - Avaliação Psicossocial',
@@ -17,11 +20,14 @@ export const viewport = {
   themeColor: '#FF6B00',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  // Tenta obter sessão do usuário
+  const session = await getSession();
+
   return (
     <html lang="pt-BR">
       <head>
@@ -31,6 +37,8 @@ export default function RootLayout({
       </head>
       <body>
         <PWAInitializer />
+        {/* Header global, sempre visível */}
+        <Header />
         {children}
       </body>
     </html>

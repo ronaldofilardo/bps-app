@@ -16,21 +16,21 @@ const mockResultados = [
     dominio: 'Demandas do Trabalho',
     score: 75,
     categoria: "medio" as "baixo" | "medio" | "alto",
-    tipo: "positiva" as "positiva" | "negativa" | "mista",
+    tipo: "positiva" as "positiva" | "negativa",
   },
   {
     grupo: 2,
     dominio: 'Controle sobre o Trabalho',
     score: 45,
     categoria: "alto" as "baixo" | "medio" | "alto",
-    tipo: "negativa" as "positiva" | "negativa" | "mista",
+    tipo: "negativa" as "positiva" | "negativa",
   },
   {
     grupo: 3,
     dominio: 'Apoio Social',
     score: 60,
     categoria: "baixo" as "baixo" | "medio" | "alto",
-    tipo: "positiva" as "positiva" | "negativa" | "mista",
+    tipo: "positiva" as "positiva" | "negativa",
   },
 ];
 
@@ -55,7 +55,7 @@ describe("ResultadosChart", () => {
         dominio: 'Jogos de Azar',
         score: 0,
         categoria: "baixo" as "baixo" | "medio" | "alto",
-        tipo: "negativa" as "positiva" | "negativa" | "mista",
+        tipo: "negativa" as "positiva" | "negativa",
       },
     ];
     render(<ResultadosChart resultados={mockComZero} />);

@@ -34,7 +34,9 @@ export default function LoginPage() {
       }
 
       // Redirecionar baseado no perfil
-      if (data.perfil === 'admin') {
+      if (data.perfil === 'master') {
+        router.push('/master')
+      } else if (data.perfil === 'admin') {
         router.push('/admin')
       } else if (data.perfil === 'rh') {
         router.push('/rh')
@@ -105,8 +107,10 @@ export default function LoginPage() {
 
         <div className="mt-4 sm:mt-6 text-center text-xs sm:text-sm text-gray-600">
           <p>Usuários de teste:</p>
-          <p className="mt-1">Admin: 00000000000 / admin123</p>
-          <p>RH: 11111111111 / rh123</p>
+          <p className="mt-1">Master: 00000000000 / master123</p>
+          <p>Admin: 11111111111 / admin123</p>
+          <p>RH: 22222222222 / rh123</p>
+          <p>Funcionário: 87545772900 / func123</p>
         </div>
       </div>
     </div>

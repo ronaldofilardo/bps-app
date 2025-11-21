@@ -129,7 +129,7 @@ Traços pessoais:
 
 - Autoeficácia
 
-### 9. **Jogos de Azar (JZ)** (6 itens) - Customizado
+### 9. **Jogos de Apostas** (6 itens) - Customizado
 
 Comportamento de risco:
 
@@ -140,7 +140,7 @@ Comportamento de risco:
 **Por que foi adicionado:**
 Problema crescente no Brasil, especialmente com jogos online e apostas esportivas.
 
-### 10. **Endividamento Financeiro (EF)** (6 itens) - Customizado
+### 10. **Endividamento** (6 itens) - Customizado
 
 Estresse financeiro:
 

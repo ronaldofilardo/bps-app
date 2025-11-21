@@ -23,12 +23,13 @@ ChartJS.register(
   Legend
 )
 
+
 interface Resultado {
   grupo: number
   dominio: string
   score: number
   categoria: 'baixo' | 'medio' | 'alto'
-  tipo: 'positiva' | 'negativa' | 'mista'
+  tipo: 'positiva' | 'negativa'
 }
 
 interface ResultadosChartProps {
@@ -43,6 +44,7 @@ export default function ResultadosChart({ resultados = [] }: ResultadosChartProp
       </div>
     );
   }
+
   // Função para obter cor da barra baseada no tipo e categoria
   const getBarColor = (resultado: Resultado): string => {
     if (resultado.tipo === 'negativa') {
@@ -59,27 +61,27 @@ export default function ResultadosChart({ resultados = [] }: ResultadosChartProp
   }
 
   // Função para criar gradiente de fundo (semáforo)
-  const createBackgroundGradient = (ctx: CanvasRenderingContext2D, tipo: 'positiva' | 'negativa' | 'mista') => {
+  const createBackgroundGradient = (ctx: CanvasRenderingContext2D, tipo: 'positiva' | 'negativa') => {
     const gradient = ctx.createLinearGradient(0, 0, ctx.canvas.width, 0)
-    
+
     if (tipo === 'negativa') {
-      // Para negativos: verde (0-33), amarelo (34-66), vermelho (67-100)
+      // Para negativos: verde (0-50), amarelo (50-75), vermelho (75-100)
       gradient.addColorStop(0, '#10B981')
-      gradient.addColorStop(0.33, '#10B981')
-      gradient.addColorStop(0.34, '#F59E0B')
-      gradient.addColorStop(0.66, '#F59E0B')
-      gradient.addColorStop(0.67, '#EF4444')
+      gradient.addColorStop(0.5, '#10B981')
+      gradient.addColorStop(0.5, '#F59E0B')
+      gradient.addColorStop(0.75, '#F59E0B')
+      gradient.addColorStop(0.75, '#EF4444')
       gradient.addColorStop(1, '#EF4444')
     } else {
-      // Para positivos: vermelho (0-33), amarelo (34-66), verde (67-100)
+      // Para positivos: vermelho (0-50), amarelo (50-75), verde (75-100)
       gradient.addColorStop(0, '#EF4444')
-      gradient.addColorStop(0.33, '#EF4444')
-      gradient.addColorStop(0.34, '#F59E0B')
-      gradient.addColorStop(0.66, '#F59E0B')
-      gradient.addColorStop(0.67, '#10B981')
+      gradient.addColorStop(0.5, '#EF4444')
+      gradient.addColorStop(0.5, '#F59E0B')
+      gradient.addColorStop(0.75, '#F59E0B')
+      gradient.addColorStop(0.75, '#10B981')
       gradient.addColorStop(1, '#10B981')
     }
-    
+
     return gradient
   }
 
@@ -108,7 +110,7 @@ export default function ResultadosChart({ resultados = [] }: ResultadosChartProp
     ]
   }
 
-  const options: ChartOptions<'bar'> = {
+  const options = {
     indexAxis: 'y' as const,
     responsive: true,
     maintainAspectRatio: false,
@@ -121,7 +123,7 @@ export default function ResultadosChart({ resultados = [] }: ResultadosChartProp
       },
       tooltip: {
         callbacks: {
-          label: function(context) {
+          label: function(context: any) {
             // Recupera o score original do resultado
             const originalScore = Number(resultados[context.dataIndex]?.score);
             if (originalScore === 0) {
@@ -131,27 +133,13 @@ export default function ResultadosChart({ resultados = [] }: ResultadosChartProp
           }
         }
       },
-      // datalabels: {
-      //   display: true,
-      //   color: '#222',
-      //   font: {
-      //     weight: 'bold',
-      //   },
-      //   align: 'center',
-      //   anchor: 'center',
-      //   formatter: function (value: number, context: any) {
-      //     const originalScore = Number(resultados[context.dataIndex]?.score);
-      //     if (originalScore === 0) return '0% (avaliado)';
-      //     return `${value}%`;
-      //   },
-      // },
     },
     scales: {
       x: {
         beginAtZero: true,
         max: 100,
         ticks: {
-          callback: function(value) {
+          callback: function(value: any) {
             return value + '%'
           }
         },
@@ -168,7 +156,7 @@ export default function ResultadosChart({ resultados = [] }: ResultadosChartProp
           font: {
             size: 12,
           },
-          callback: function(value, index) {
+          callback: function(value: any, index: any) {
             const label = this.getLabelForValue(value as number)
             return label.length > 25 ? label.substring(0, 25) + '...' : label
           }
@@ -181,12 +169,12 @@ export default function ResultadosChart({ resultados = [] }: ResultadosChartProp
       }
     },
     animation: false,
-    onHover: (event, elements) => {
+    onHover: (event: any, elements: any) => {
       if (event.native?.target) {
         (event.native.target as HTMLCanvasElement).style.cursor = elements.length > 0 ? 'pointer' : 'default'
       }
     }
-  }
+  } as ChartOptions<'bar'>;
 
   return (
     <div className="w-full bg-white rounded-lg shadow-lg p-3 sm:p-6 mb-4 sm:mb-6 print:static print:transform-none print:w-full">

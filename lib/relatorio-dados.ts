@@ -21,7 +21,7 @@ export const dadosRelatorio: RelatorioGrupo[] = [
   },
   {
     id: 2,
-    nome: "Influência e Desenvolvimento",
+    nome: "Organização e Conteúdo do Trabalho",
     explicacao: "É o quanto você decide como fazer seu trabalho e aprende coisas novas para crescer. Exemplos: • Escolher a ordem das tarefas • Ter liberdade para resolver problemas do seu jeito • Aprender habilidades que te tornam mais eficiente",
     gestao: "Dicas práticas que aumentam sua produtividade e valor na empresa: • Sugira 1 melhoria por semana na caixa de ideias – muitas viram padrão. • Compartilhe 1 aprendizado com o time (5 min na reunião). • Peça 1 tarefa nova ao líder – mostra proatividade. • Treinamento interno gratuito: Habilidades do Futuro (próximo: [DATA]). Sua iniciativa acelera o resultado de todos – você é peça-chave.",
     baixo: "Vamos crescer juntos. Você sente pouca liberdade ou aprendizado – isso limita seu potencial. Ações simples para entregar mais valor: • Liste 1 ideia de melhoria e envie à caixa de sugestões. • Peça ao líder 1 tarefa desafiadora – mostra seu interesse. • Participe do treinamento interno – gratuito e rápido. • Refaça o COPSOQ em 3 meses – acompanhe seu progresso.",
@@ -30,7 +30,7 @@ export const dadosRelatorio: RelatorioGrupo[] = [
   },
   {
     id: 3,
-    nome: "Relações e Liderança",
+    nome: "Relações Interpessoais e Liderança",
     explicacao: "É o apoio que você recebe de colegas e líder e como a liderança facilita seu dia. Exemplos: • Ajuda rápida quando precisa • Feedback claro sobre seu desempenho • Clima de equipe e confiança na chefia",
     gestao: "Dicas práticas que aceleram resultados e fortalecem o time: • Cumprimente 1 colega por dia – melhora o clima em segundos. • Peça feedback rápido ao líder (1 frase) – ajusta seu foco. • Ofereça ajuda em 1 tarefa – cria rede de confiança. • Reunião semanal de 15 min com o time (já existe). Relacionamentos fortes = entrega mais rápida e menos erros.",
     baixo: "Vamos conectar mais. Você sente pouco apoio ou orientação clara – isso pode atrasar seu ritmo. Ações simples para ganhar velocidade: • Inicie 1 conversa curta com um colega hoje (café, corredor). • Peça 1 feedback rápido ao líder – \"O que posso melhorar?\". • Participe da próxima reunião de time – sua presença conta. • Refaça o COPSOQ em 3 meses – veja a diferença.",
@@ -39,7 +39,7 @@ export const dadosRelatorio: RelatorioGrupo[] = [
   },
   {
     id: 4,
-    nome: "Conflito Trabalho-Família e Segurança",
+    nome: "Interface Trabalho-Indivíduo",
     explicacao: "É o quanto o trabalho invade sua vida pessoal e a estabilidade que você sente no cargo. Exemplos: • Cancelar planos por causa do trabalho • Medo de perder o emprego ou mudanças bruscas",
     gestao: "Dicas práticas que aumentam seu foco e entrega: • Planeje 1 compromisso pessoal fixo por semana – protege sua energia. • Desligue notificações após o horário – volta mais produtivo no dia seguinte. • Atualize 1 meta de carreira com o líder – reforça sua segurança. • Reunião mensal 1:1 com o líder (já existe). Equilíbrio pessoal = cabeça limpa = mais resultados para a empresa.",
     baixo: "Parabéns! Você tem bom equilíbrio e segurança – isso mantém sua produtividade alta. Continue assim: • Mantenha 1 compromisso pessoal fixo por semana. • Compartilhe sua técnica de equilíbrio com o time (opcional). • Avise se sentir qualquer mudança.",
@@ -48,6 +48,24 @@ export const dadosRelatorio: RelatorioGrupo[] = [
   },
   {
     id: 5,
+    nome: "Valores no Trabalho",
+    explicacao: "É o quanto a empresa facilita seu dia com recursos, clareza e reconhecimento. Exemplos: • Ferramentas adequadas • Metas claras • Reconhecimento por resultados",
+    gestao: "Dicas práticas que aumentam sua entrega e satisfação: • Registre 1 dificuldade de recurso (5 min) – envie à caixa. • Peça 1 meta clara ao líder – evita retrabalho. • Dê 1 feedback positivo ao time – reforça o ciclo. • Reunião mensal de alinhamento (já existe). Suporte claro = menos esforço = mais resultado.",
+    baixo: "Vamos crescer juntos. Você sente pouco reconhecimento ou justiça – isso limita seu engajamento. Ações simples para se sentir mais valorizado: • Registre 1 contribuição sua e compartilhe com o líder. • Peça 1 feedback sobre seu trabalho – mostra seu interesse. • Participe da próxima reunião de valores – sua voz conta. • Refaça o COPSOQ em 3 meses – acompanhe seu progresso.",
+    medio: "Boa base! Você tem algum reconhecimento e justiça, mas pode fortalecer. Ações práticas para se sentir mais valorizado: • Compartilhe 1 realização sua na reunião semanal. • Peça 1 feedback específico ao líder (ex: \"O que valoriza?\"). • Dê feedback positivo a 1 colega – reforça o ciclo. • Monitore com o COPSOQ trimestral.",
+    alto: "Excelente! Você tem altos valores organizacionais – isso multiplica sua motivação. Continue assim: • Lidere 1 ação de reconhecimento no time. • Compartilhe seus valores com 1 colega. • Avise se precisar de mais reconhecimento."
+  },
+  {
+    id: 6,
+    nome: "Personalidade (Opcional)",
+    explicacao: "É o quanto você se sente motivado e conectado com o propósito da empresa. Exemplos: • Orgulho do que faz • Alinhamento com valores da empresa • Vontade de continuar por anos",
+    gestao: "Dicas práticas que aumentam sua motivação e entrega: • Escreva 1 motivo de orgulho por semana – 1 frase. • Conecte 1 tarefa diária ao propósito da equipe. • Participe de 1 ação de impacto (ex: voluntariado interno). • Reunião mensal de propósito (já existe). Propósito claro = motivação alta = entrega excepcional.",
+    baixo: "Vamos reacender! Você sente pouco engajamento – isso limita seu brilho. Ações simples para render mais: • Escreva 1 motivo de orgulho esta semana. • Conecte 1 tarefa ao impacto no cliente. • Participe da próxima ação de impacto. • Refaça o COPSOQ em 3 meses.",
+    medio: "Bom caminho! Você tem algum engajamento, mas pode ir além. Ações práticas para brilhar mais: • Escreva 1 motivo de orgulho por semana. • Conecte 1 tarefa ao propósito da empresa. • Participe de 1 ação de impacto. • Monitore com o COPSOQ trimestral.",
+    alto: "Parabéns! Você tem alto engajamento e propósito – isso inspira o time. Continue assim: • Lidere 1 ação de impacto. • Compartilhe seu propósito com 1 colega. • Avise se precisar de mais desafios alinhados."
+  },
+  {
+    id: 7,
     nome: "Saúde e Bem-Estar",
     explicacao: "É como você se sente fisicamente e mentalmente no dia a dia do trabalho. Exemplos: • Energia para as tarefas • Sono de qualidade • Ausência de estresse ou dores por causa do trabalho",
     gestao: "Dicas práticas que mantêm você 100% para entregar mais: • Durma 7h por noite – 1h a mais = 20% mais foco. • Alongue 2 min a cada 2h – evita dores e mantém o ritmo. • Respire fundo 3x quando sentir tensão – limpa a mente em 30 s. • Reunião de check-in semanal (já existe). Sua energia é o motor da equipe – cuide dela e produza o dobro.",
@@ -56,7 +74,7 @@ export const dadosRelatorio: RelatorioGrupo[] = [
     alto: "Vamos recuperar sua energia. Você está com sinais claros de desgaste – isso corta sua produtividade. Ações práticas para você render mais: • Abra protocolo no SESMT hoje (link: [INSIRA]) – é rápido e anônimo. • Reunião com líder em 48h para ajuste de carga. • Durma 7h fixas – crie rotina noturna (desligar telas 30 min antes). • Alongamento diário + respiração será monitorado semanalmente. Sua função é crítica – com energia, você entrega o melhor."
   },
   {
-    id: 6,
+    id: 8,
     nome: "Comportamentos Ofensivos",
     explicacao: "São ações que humilham, excluem ou ameaçam você no trabalho. Exemplos: • Comentários maliciosos ou piadas ofensivas • Exclusão de reuniões ou grupos • Retenção de informações importantes • Assédio moral ou sexual",
     gestao: "Dicas práticas que protegem sua produtividade e o clima do time: • Registre 1 fato estranho em bloco de notas (data + descrição). • Fale com 1 colega de confiança – dois olhos veem mais. • Use o canal anônimo – 2 cliques e zero risco. • Campanha mensal de respeito (já existe). Ambiente limpo = foco total = entrega máxima.",
@@ -65,26 +83,8 @@ export const dadosRelatorio: RelatorioGrupo[] = [
     alto: "Vamos proteger você. Você sofre ofensas frequentes – isso corta sua produtividade e saúde. Ações práticas para você render 100%: • Abra protocolo no canal anônimo hoje (link: [INSIRA]). • Reunião com RH em 48h – investigação imediata. • Registre tudo (data, local, testemunhas). • Apoio psicológico interno será agendado. Sua função é vital – sem ofensas, você entrega o dobro."
   },
   {
-    id: 7,
-    nome: "Suporte Organizacional",
-    explicacao: "É o quanto a empresa facilita seu dia com recursos, clareza e reconhecimento. Exemplos: • Ferramentas adequadas • Metas claras • Reconhecimento por resultados",
-    gestao: "Dicas práticas que aumentam sua entrega e satisfação: • Registre 1 dificuldade de recurso (5 min) – envie à caixa. • Peça 1 meta clara ao líder – evita retrabalho. • Dê 1 feedback positivo ao time – reforça o ciclo. • Reunião mensal de alinhamento (já existe). Suporte claro = menos esforço = mais resultado.",
-    baixo: "Boa base! Você tem algum suporte, mas pode melhorar. Ações simples para render mais: • Registre 1 necessidade de recurso na caixa. • Peça 1 meta mais clara ao líder. • Dê 1 feedback positivo ao time. • Refaça o COPSOQ em 3 meses.",
-    medio: "Ótimo! Você tem bom suporte organizacional – isso acelera sua entrega. Continue assim: • Sugira 1 melhoria de recurso. • Dê feedback positivo regularmente. • Avise se precisar de mais clareza.",
-    alto: "Excelente! Você tem alto suporte – isso multiplica sua produtividade. Continue assim: • Lidere 1 melhoria de processo. • Mentore 1 colega em metas claras. • Avise se precisar de mais autonomia."
-  },
-  {
-    id: 8,
-    nome: "Engajamento e Propósito",
-    explicacao: "É o quanto você se sente motivado e conectado com o propósito da empresa. Exemplos: • Orgulho do que faz • Alinhamento com valores da empresa • Vontade de continuar por anos",
-    gestao: "Dicas práticas que aumentam sua motivação e entrega: • Escreva 1 motivo de orgulho por semana – 1 frase. • Conecte 1 tarefa diária ao propósito da equipe. • Participe de 1 ação de impacto (ex: voluntariado interno). • Reunião mensal de propósito (já existe). Propósito claro = motivação alta = entrega excepcional.",
-    baixo: "Vamos reacender! Você sente pouco engajamento – isso limita seu brilho. Ações simples para render mais: • Escreva 1 motivo de orgulho esta semana. • Conecte 1 tarefa ao impacto no cliente. • Participe da próxima ação de impacto. • Refaça o COPSOQ em 3 meses.",
-    medio: "Bom caminho! Você tem algum engajamento, mas pode ir além. Ações práticas para brilhar mais: • Escreva 1 motivo de orgulho por semana. • Conecte 1 tarefa ao propósito da empresa. • Participe de 1 ação de impacto. • Monitore com o COPSOQ trimestral.",
-    alto: "Parabéns! Você tem alto engajamento e propósito – isso inspira o time. Continue assim: • Lidere 1 ação de impacto. • Compartilhe seu propósito com 1 colega. • Avise se precisar de mais desafios alinhados."
-  },
-  {
     id: 9,
-    nome: "Jogos de Azar",
+    nome: "Jogos de Apostas",
     explicacao: "É o uso de apostas (online, loteria, cassino, bolão) que pode afetar seu foco e finanças. Exemplos: • Apostar dinheiro com frequência • Pensar em jogos durante o trabalho • Sentir necessidade de \"recuperar\" perdas",
     gestao: "Dicas práticas que mantêm sua cabeça no trabalho e no bolso: • Registre gastos com apostas por 1 semana (bloco ou app grátis). • Substitua 1 aposta por 1 meta de trabalho – mesma emoção, mais ganho. • Desligue notificações de sites de aposta – 1 clique. • Reunião mensal de foco financeiro (já existe). Cabeça limpa = entrega rápida = bolso cheio.",
     baixo: "Ótimo! Você não tem risco com jogos – seu foco está 100% no trabalho. Continue assim: • Mantenha zero distração com apostas. • Compartilhe sua disciplina com o time (opcional). • Avise se notar colegas em risco.",
@@ -93,12 +93,12 @@ export const dadosRelatorio: RelatorioGrupo[] = [
   },
   {
     id: 10,
-    nome: "Endividamento Social",
+    nome: "Endividamento",
     explicacao: "É quando dívidas ou pressão financeira afetam seu foco, sono e entrega no trabalho. Exemplos: • Contas atrasadas • Preocupação constante com dinheiro • Empréstimos entre colegas",
     gestao: "Dicas práticas que mantêm seu foco no trabalho e paz financeira: • Liste 3 despesas fixas e 1 corte possível – 5 min/dia. • Use planilha grátis (modelo interno) – controle em 1 clique. • Converse com 1 colega de confiança – apoio emocional. • Oficina mensal de finanças (já existe). Finanças em ordem = cabeça leve = entrega 100%.",
     baixo: "Ótimo! Você não tem pressão financeira – seu foco está total no trabalho. Continue assim: • Mantenha o controle simples de gastos. • Compartilhe 1 dica financeira com o time (opcional). • Avise se notar colegas em dificuldade.",
     medio: "Atenção. Você sente alguma pressão com dívidas – isso rouba energia. Ações simples para render mais: • Liste 3 despesas e 1 corte – use planilha interna. • Bloqueie compras por impulso (app grátis). • Participe da oficina de finanças – próxima [DATA]. • Refaça o questionário em 3 meses.",
-    alto: "Vamos organizar juntos. Você tem alto endividamento social – isso drena sua produtividade. Ações práticas para você entregar mais: • Abra protocolo confidencial no RH hoje (link: [INSIRA]). • Reunião com líder em 48h para apoio + ajuste de metas. • Use planilha interna + bloqueie compras impulsivas. • Acompanhamento mensal será agendado. Sua função é essencial – com paz financeira, você entrega o dobro."
+    alto: "Vamos organizar juntos. Você tem alto endividamento – isso drena sua produtividade. Ações práticas para você entregar mais: • Abra protocolo confidencial no RH hoje (link: [INSIRA]). • Reunião com líder em 48h para apoio + ajuste de metas. • Use planilha interna + bloqueie compras impulsivas. • Acompanhamento mensal será agendado. Sua função é vital – com paz financeira, você entrega o dobro."
   }
 ]
 

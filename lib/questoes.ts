@@ -1,9 +1,18 @@
 // Dados dos grupos de avaliação COPSOQ III + JZ + EF
 
+export interface QuestionCondition {
+  questionId: string // ID da questão que determina a condição
+  operator: 'gt' | 'lt' | 'eq' | 'gte' | 'lte' | 'ne' // Operador de comparação
+  value: number // Valor para comparação
+}
+
 export interface QuestionItem {
   id: string
   texto: string
+  textoGestao?: string // Texto específico para gestão
   invertida?: boolean // Para cálculo de score (alguns itens são negativos)
+  condition?: QuestionCondition // Condição para exibir a questão
+  category?: 'behavioral' | 'financial' | 'health' | 'core' // Categoria da questão
 }
 
 export interface GrupoAvaliacao {
@@ -12,7 +21,7 @@ export interface GrupoAvaliacao {
   dominio: string
   descricao: string
   itens: QuestionItem[]
-  tipo: 'positiva' | 'negativa' | 'mista'
+  tipo: 'positiva' | 'negativa'
 }
 
 export const grupos: GrupoAvaliacao[] = [
@@ -23,17 +32,17 @@ export const grupos: GrupoAvaliacao[] = [
     descricao: 'Avaliação das exigências quantitativas e ritmo de trabalho',
     tipo: 'negativa',
     itens: [
-      { id: 'Q1', texto: 'Com que frequência você tem muito trabalho a fazer?' },
-      { id: 'Q2', texto: 'Com que frequência você não tem tempo de completar todas as suas tarefas?' },
-      { id: 'Q3', texto: 'Com que frequência você precisa trabalhar em ritmo acelerado?' },
-      { id: 'Q4', texto: 'Com que frequência seu trabalho exige que você trabalhe muito rápido?' },
-      { id: 'Q5', texto: 'Com que frequência você fica para trás com seu trabalho?' },
-      { id: 'Q6', texto: 'Com que frequência você tem tempo suficiente para suas tarefas?', invertida: true },
-      { id: 'Q7', texto: 'Com que frequência seu trabalho exige atenção constante?' },
-      { id: 'Q8', texto: 'Com que frequência seu trabalho te deixa emocionalmente esgotado?' },
-      { id: 'Q9', texto: 'Com que frequência seu trabalho te deixa fisicamente cansado?' },
-      { id: 'Q10', texto: 'Com que frequência você precisa esconder seus sentimentos?' },
-      { id: 'Q11', texto: 'Com que frequência você lida com situações emocionalmente difíceis?' },
+      { id: 'Q1', texto: 'Com que frequência você tem muito serviço acumulado?', textoGestao: 'Com que frequência você tem muito serviço acumulado?' },
+      { id: 'Q2', texto: 'Com que frequência você não consegue terminar tudo que precisa no dia?', textoGestao: 'Com que frequência você não consegue terminar tudo que precisa no dia?' },
+      { id: 'Q3', texto: 'Com que frequência você precisa trabalhar em ritmo muito acelerado?', textoGestao: 'Com que frequência você tem que trabalhar em ritmo muito acelerado?' },
+      { id: 'Q4', texto: 'Com que frequência o trabalho exige que você faça as coisas bem rápido?', textoGestao: 'Com que frequência seu trabalho exige que você faça as coisas bem rápido?' },
+      { id: 'Q5', texto: 'Com que frequência você sente que está ficando atrasado no trabalho?', textoGestao: 'Com que frequência você sente que está atrasado no trabalho?' },
+      { id: 'Q6', texto: 'Com que frequência você tem tempo suficiente para fazer tudo com calma?', textoGestao: 'Com que frequência você tem tempo suficiente pra fazer tudo que precisa?', invertida: true },
+      { id: 'Q7', texto: 'Com que frequência o trabalho exige que você fique o tempo todo muito concentrado?', textoGestao: 'Com que frequência seu trabalho exige que você fique o tempo todo concentrado?' },
+      { id: 'Q8', texto: 'Com que frequência o trabalho te deixa emocionalmente esgotado?', textoGestao: 'Com que frequência o trabalho te deixa emocionalmente acabado?' },
+      { id: 'Q9', texto: 'Com que frequência o trabalho te deixa fisicamente exausto?', textoGestao: 'Com que frequência o trabalho te deixa fisicamente exausto?' },
+      { id: 'Q10', texto: 'Com que frequência você precisa esconder o que realmente está sentindo?', textoGestao: 'Com que frequência você precisa esconder o que está sentindo de verdade?' },
+      { id: 'Q11', texto: 'Com que frequência você precisa lidar com situações que mexem forte com suas emoções?', textoGestao: 'Com que frequência você enfrenta situações emocionalmente pesadas no trabalho?' },
     ]
   },
   {
@@ -76,7 +85,7 @@ export const grupos: GrupoAvaliacao[] = [
     titulo: 'Grupo 4 - Interface Trabalho-Indivíduo',
     dominio: 'Interface Trabalho-Indivíduo',
     descricao: 'Insegurança no trabalho e conflito trabalho-família',
-    tipo: 'mista',
+    tipo: 'negativa',
     itens: [
       { id: 'Q29', texto: 'Você está preocupado em se tornar desempregado?' },
       { id: 'Q30', texto: 'Você está preocupado que mudanças no trabalho dificultem sua situação?' },
@@ -148,7 +157,7 @@ export const grupos: GrupoAvaliacao[] = [
   },
   {
     id: 9,
-    titulo: 'Grupo 9 - Jogos de Azar (JZ)',
+    titulo: 'Grupo 9 - Jogos de Apostas',
     dominio: 'Comportamento de Jogo',
     descricao: 'Avaliação de comportamentos relacionados a jogos de azar',
     tipo: 'negativa',
@@ -163,7 +172,7 @@ export const grupos: GrupoAvaliacao[] = [
   },
   {
     id: 10,
-    titulo: 'Grupo 10 - Endividamento (EF)',
+    titulo: 'Grupo 10 - Endividamento',
     dominio: 'Endividamento Financeiro',
     descricao: 'Avaliação do nível de endividamento e estresse financeiro',
     tipo: 'negativa',
@@ -179,11 +188,30 @@ export const grupos: GrupoAvaliacao[] = [
 ]
 
 export const escalasResposta = {
-  'Sempre': 100,
-  'Muitas vezes': 75,
-  'Às vezes': 50,
-  'Raramente': 25,
   'Nunca': 0,
+  'Raramente': 25,
+  'Às vezes': 50,
+  'Muitas vezes': 75,
+  'Sempre': 100,
 }
 
 export type RespostaValor = keyof typeof escalasResposta
+
+// Função para obter texto da questão baseado no nível do funcionário
+export function getTextoQuestao(item: QuestionItem, nivelCargo: 'operacional' | 'gestao'): string {
+  if (nivelCargo === 'gestao' && item.textoGestao) {
+    return item.textoGestao
+  }
+  return item.texto
+}
+
+// Função para obter todas as questões com diferenciação por nível
+export function getQuestoesPorNivel(nivelCargo: 'operacional' | 'gestao') {
+  return grupos.map(grupo => ({
+    ...grupo,
+    itens: grupo.itens.map(item => ({
+      ...item,
+      texto: getTextoQuestao(item, nivelCargo)
+    }))
+  }))
+}

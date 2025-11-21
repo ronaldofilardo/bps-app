@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/Header'
+import GerenciarEmpresas from '@/components/GerenciarEmpresas'
 
 interface Session {
   cpf: string
@@ -18,6 +19,12 @@ interface Funcionario {
   email: string
   perfil: string
   ativo: boolean
+  empresa_id?: number
+  empresa_nome?: string
+  matricula?: string
+  nivel_cargo?: 'operacional' | 'gestao'
+  turno?: string
+  escala?: string
 }
 
 export default function AdminPage() {
@@ -25,6 +32,7 @@ export default function AdminPage() {
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [activeTab, setActiveTab] = useState<'funcionarios' | 'empresas'>('funcionarios')
   const router = useRouter()
 
   useEffect(() => {
@@ -107,86 +115,143 @@ export default function AdminPage() {
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-800 mb-2">Administração</h2>
-          <p className="text-gray-600">Gerenciamento de funcionários e sistema</p>
+          <p className="text-gray-600">Gerenciamento de funcionários e empresas clientes</p>
         </div>
 
-        {/* Upload CSV */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h3 className="text-xl font-bold text-gray-800 mb-4">Importar Funcionários (CSV)</h3>
-          <p className="text-sm text-gray-600 mb-4">
-            Formato esperado: cpf,nome,setor,funcao,email,perfil
-          </p>
-          
-          <div className="flex items-center gap-4">
-            <label className="cursor-pointer bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-hover transition-colors">
-              {uploading ? 'Importando...' : 'Escolher Arquivo CSV'}
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleImportCSV}
-                disabled={uploading}
-                className="hidden"
-              />
-            </label>
-            
+        {/* Tabs Navigation */}
+        <div className="mb-6">
+          <nav className="flex space-x-8">
             <button
-              onClick={() => router.push('/rh')}
-              className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 transition-colors"
+              onClick={() => setActiveTab('funcionarios')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'funcionarios'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
             >
-              Ver Dashboard RH
+              Funcionários
             </button>
-          </div>
+            <button
+              onClick={() => setActiveTab('empresas')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'empresas'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Empresas Clientes
+            </button>
+          </nav>
         </div>
 
-        {/* Tabela de funcionários */}
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="p-6">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">
-              Funcionários Cadastrados ({funcionarios.length})
-            </h3>
-          </div>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">CPF</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Setor</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Função</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Perfil</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {funcionarios.map((func) => (
-                  <tr key={func.cpf} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm text-gray-900">{func.cpf}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{func.nome}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{func.setor}</td>
-                    <td className="px-6 py-4 text-sm text-gray-600">{func.funcao}</td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        func.perfil === 'admin' ? 'bg-purple-100 text-purple-800' :
-                        func.perfil === 'rh' ? 'bg-blue-100 text-blue-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {func.perfil.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        func.ativo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                      }`}>
-                        {func.ativo ? 'ATIVO' : 'INATIVO'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {/* Conteúdo baseado na tab ativa */}
+        {activeTab === 'funcionarios' && (
+          <>
+            {/* Upload CSV */}
+            <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+              <h3 className="text-xl font-bold text-gray-800 mb-4">Importar Funcionários (CSV)</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Formato esperado: cpf,nome,setor,funcao,email,perfil,empresa_id,matricula,nivel_cargo,turno,escala
+              </p>
+              
+              <div className="flex items-center gap-4">
+                <label className="cursor-pointer bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-hover transition-colors">
+                  {uploading ? 'Importando...' : 'Escolher Arquivo CSV'}
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleImportCSV}
+                    disabled={uploading}
+                    className="hidden"
+                  />
+                </label>
+                
+                <button
+                  onClick={() => router.push('/rh')}
+                  className="bg-gray-200 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Ver Dashboard RH
+                </button>
+              </div>
+            </div>
+
+            {/* Tabela de funcionários */}
+            <div className="bg-white rounded-lg shadow-md overflow-hidden">
+              <div className="p-6">
+                <h3 className="text-xl font-bold text-gray-800 mb-4">
+                  Funcionários Cadastrados ({funcionarios.length})
+                </h3>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">CPF</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Matrícula</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Setor/Função</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Empresa</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nível</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Turno/Escala</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Perfil</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {funcionarios.map((func) => (
+                      <tr key={func.cpf} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 text-sm text-gray-900">{func.cpf}</td>
+                        <td className="px-6 py-4 text-sm text-gray-900">{func.nome}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{func.matricula || '-'}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          <div>{func.setor || '-'}</div>
+                          <div className="text-xs text-gray-500">{func.funcao || '-'}</div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {func.empresa_nome || '-'}
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          {func.nivel_cargo ? (
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                              func.nivel_cargo === 'gestao' ? 'bg-indigo-100 text-indigo-800' : 'bg-orange-100 text-orange-800'
+                            }`}>
+                              {func.nivel_cargo === 'gestao' ? 'GESTÃO' : 'OPERACIONAL'}
+                            </span>
+                          ) : '-'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          <div>{func.turno || '-'}</div>
+                          <div className="text-xs text-gray-500">{func.escala || '-'}</div>
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                            func.perfil === 'admin' ? 'bg-purple-100 text-purple-800' :
+                            func.perfil === 'rh' ? 'bg-blue-100 text-blue-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {func.perfil.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                            func.ativo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {func.ativo ? 'ATIVO' : 'INATIVO'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'empresas' && (
+          <GerenciarEmpresas />
+        )}
       </main>
     </div>
   )

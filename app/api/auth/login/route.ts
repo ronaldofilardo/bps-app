@@ -17,7 +17,7 @@ export async function POST(request: Request) {
 
     // Buscar funcionário
     const result = await query(
-      'SELECT cpf, nome, perfil, senha_hash, ativo FROM funcionarios WHERE cpf = $1',
+      'SELECT cpf, nome, perfil, senha_hash, ativo, nivel_cargo FROM funcionarios WHERE cpf = $1',
       [cpf]
     )
 
@@ -53,6 +53,7 @@ export async function POST(request: Request) {
       cpf: funcionario.cpf,
       nome: funcionario.nome,
       perfil: funcionario.perfil,
+      nivelCargo: funcionario.nivel_cargo,
     })
 
     return NextResponse.json({
@@ -60,6 +61,7 @@ export async function POST(request: Request) {
       cpf: funcionario.cpf,
       nome: funcionario.nome,
       perfil: funcionario.perfil,
+      nivelCargo: funcionario.nivel_cargo,
     })
   } catch (error) {
     console.error('Erro no login:', error)

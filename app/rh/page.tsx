@@ -1,17 +1,23 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/Header'
-import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js'
-import { Bar, Doughnut } from 'react-chartjs-2'
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js'
+import { Bar } from 'react-chartjs-2'
 
-ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 interface Session {
   cpf: string
   nome: string
   perfil: 'funcionario' | 'rh' | 'admin'
+}
+
+interface Empresa {
+  id: number
+  nome: string
+  cnpj: string
 }
 
 interface DashboardData {
@@ -26,6 +32,9 @@ interface DashboardData {
     media_score: number
     categoria: string
     total: number
+    baixo: number
+    medio: number
+    alto: number
   }>
   distribuicao: Array<{
     categoria: string
@@ -37,29 +46,53 @@ export default function RHPage() {
   const [session, setSession] = useState<Session | null>(null)
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [empresas, setEmpresas] = useState<Empresa[]>([])
+  const [selectedEmpresa, setSelectedEmpresa] = useState<string>('')
   const router = useRouter()
 
   useEffect(() => {
-    fetchData()
+    const loadEmpresasAndData = async () => {
+      await loadEmpresas()
+      await fetchData()
+    }
+    loadEmpresasAndData()
   }, [])
 
-  const fetchData = async () => {
+  const loadEmpresas = async () => {
     try {
-      const sessionRes = await fetch('/api/auth/session')
-      if (!sessionRes.ok) {
-        router.push('/login')
-        return
+      const res = await fetch('/api/rh/empresas')
+      if (res.ok) {
+        const empresasData = await res.json()
+        setEmpresas(empresasData)
       }
-      const sessionData = await sessionRes.json()
-      
-      if (sessionData.perfil !== 'rh' && sessionData.perfil !== 'admin') {
-        router.push('/dashboard')
-        return
-      }
-      
-      setSession(sessionData)
+    } catch (error) {
+      console.error('Erro ao carregar empresas:', error)
+    }
+  }
 
-      const dashboardRes = await fetch('/api/rh/dashboard')
+  const fetchData = async (empresaId?: string) => {
+    try {
+      if (!session) {
+        const sessionRes = await fetch('/api/auth/session')
+        if (!sessionRes.ok) {
+          router.push('/login')
+          return
+        }
+        const sessionData = await sessionRes.json()
+
+        if (sessionData.perfil !== 'rh' && sessionData.perfil !== 'admin') {
+          router.push('/dashboard')
+          return
+        }
+
+        setSession(sessionData)
+      }
+
+      const dashboardUrl = empresaId
+        ? `/api/rh/dashboard?empresa_id=${empresaId}`
+        : '/api/rh/dashboard'
+
+      const dashboardRes = await fetch(dashboardUrl)
       const dashboardData = await dashboardRes.json()
       setData(dashboardData)
     } catch (error) {
@@ -79,48 +112,34 @@ export default function RHPage() {
     alert('Exportação Excel em desenvolvimento')
   }
 
-  const liberarAvaliacao = async () => {
+
+  const liberarPorNivel = async (nivel: 'operacional' | 'gestao') => {
     try {
-      const response = await fetch('/api/rh/liberar-avaliacao', {
+      const response = await fetch('/api/rh/liberar-por-nivel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cpf: '87545772900' }),
+        body: JSON.stringify({ nivelCargo: nivel }),
       })
 
       if (response.ok) {
-        alert('Nova avaliação liberada para o funcionário CPF 87545772900')
-        // Recarregar dados se necessário
-        fetchData()
+        const result = await response.json()
+        alert(`${result.message}\n✅ Criadas: ${result.avaliacoesCreated}\n⚠️ Já existiam: ${result.avaliacoesExistentes}\n📊 Total funcionários: ${result.totalFuncionarios}`)
+        fetchData(selectedEmpresa || undefined)
       } else {
         const error = await response.json()
         alert('Erro: ' + error.error)
       }
     } catch (error) {
-      alert('Erro ao liberar avaliação')
+      alert('Erro ao liberar avaliações')
     }
   }
 
-  const limparAvaliacoesConcluidas = async () => {
-    try {
-      const response = await fetch('/api/rh/limpar-avaliacoes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cpf: '87545772900' }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        alert(`Avaliações concluídas removidas: ${data.message}`)
-        // Recarregar dados se necessário
-        fetchData()
-      } else {
-        const error = await response.json()
-        alert('Erro: ' + error.error)
-      }
-    } catch (error) {
-      alert('Erro ao limpar avaliações')
-    }
+  const handleEmpresaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const empresaId = e.target.value
+    setSelectedEmpresa(empresaId)
+    fetchData(empresaId || undefined)
   }
+
 
   if (loading || !session || !data) {
     return (
@@ -132,7 +151,7 @@ export default function RHPage() {
 
   // Dados para gráfico de barras
   const barData = {
-    labels: data.resultados.map(r => r.dominio.substring(0, 20)),
+    labels: data.resultados.map(r => `Grupo ${r.grupo}: ${r.dominio.substring(0, 15)}`),
     datasets: [{
       label: 'Score Médio',
       data: data.resultados.map(r => r.media_score),
@@ -142,27 +161,35 @@ export default function RHPage() {
     }],
   }
 
-  // Dados para gráfico de pizza
-  const doughnutData = {
-    labels: ['Baixo', 'Médio', 'Alto'],
-    datasets: [{
-      data: [
-        data.distribuicao.find(d => d.categoria === 'baixo')?.total || 0,
-        data.distribuicao.find(d => d.categoria === 'medio')?.total || 0,
-        data.distribuicao.find(d => d.categoria === 'alto')?.total || 0,
-      ],
-      backgroundColor: ['#EF4444', '#F59E0B', '#10B981'],
-    }],
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header userName={session.nome} userRole={session.perfil} />
+
       
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-800 mb-2">Dashboard RH</h2>
           <p className="text-gray-600">Visão geral das avaliações psicossociais</p>
+        </div>
+
+        {/* Filtro de empresas */}
+        <div className="mb-6">
+          <label htmlFor="empresa-select" className="block text-sm font-medium text-gray-700 mb-2">
+            Filtrar por Empresa:
+          </label>
+          <select
+            id="empresa-select"
+            value={selectedEmpresa}
+            onChange={handleEmpresaChange}
+            className="block w-full max-w-md px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
+          >
+            <option value="">Todas as empresas</option>
+            {empresas.map((empresa) => (
+              <option key={empresa.id} value={empresa.id}>
+                {empresa.nome}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Cards de estatísticas */}
@@ -183,44 +210,49 @@ export default function RHPage() {
           </div>
         </div>
 
-        {/* Botões de exportação */}
-        <div className="flex gap-4 mb-8 flex-wrap">
-          <button
-            onClick={exportarPDF}
-            className="bg-danger text-white px-6 py-2 rounded-lg hover:bg-red-600 transition-colors"
-          >
-            📄 Exportar PDF
-          </button>
-          <button
-            onClick={exportarExcel}
-            className="bg-success text-white px-6 py-2 rounded-lg hover:bg-green-600 transition-colors"
-          >
-            📊 Exportar Excel
-          </button>
-          <button
-            onClick={liberarAvaliacao}
-            className="bg-primary text-white px-6 py-2 rounded-lg hover:bg-primary-hover transition-colors"
-          >
-            🚀 Liberar Nova Avaliação (CPF 87545772900)
-          </button>
-          <button
-            onClick={limparAvaliacoesConcluidas}
-            className="bg-warning text-white px-6 py-2 rounded-lg hover:bg-yellow-600 transition-colors"
-          >
-            🗑️ Limpar Avaliações Concluídas (CPF 87545772900)
-          </button>
+        {/* Botões de ações */}
+        <div className="space-y-4 mb-8">
+          {/* Botões de liberação por nível */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">🎯 Liberar Avaliações por Nível</h3>
+            <div className="flex gap-4 flex-wrap">
+              <button
+                onClick={() => liberarPorNivel('operacional')}
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+              >
+                🔧 Liberar para OPERACIONAIS
+              </button>
+              <button
+                onClick={() => liberarPorNivel('gestao')}
+                className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors font-semibold"
+              >
+                👔 Liberar para GESTÃO
+              </button>
+            </div>
+          </div>
+
+          {/* Botões de exportação e outros */}
+          <div className="flex gap-4 flex-wrap">
+            <button
+              onClick={exportarPDF}
+              className="bg-danger text-white px-6 py-2 rounded-lg hover:bg-red-600 transition-colors"
+            >
+              📄 Exportar PDF
+            </button>
+            <button
+              onClick={exportarExcel}
+              className="bg-success text-white px-6 py-2 rounded-lg hover:bg-green-600 transition-colors"
+            >
+              📊 Exportar Excel
+            </button>
+          </div>
         </div>
 
         {/* Gráficos */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6">
           <div className="bg-white rounded-lg shadow-md p-6">
             <h3 className="text-xl font-bold text-gray-800 mb-4">Scores por Domínio</h3>
             <Bar data={barData} options={{ responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }} />
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Distribuição por Categoria</h3>
-            <Doughnut data={doughnutData} options={{ responsive: true }} />
           </div>
         </div>
 
@@ -233,29 +265,61 @@ export default function RHPage() {
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Grupo</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Domínio</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Score Médio</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Categoria</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Baixo</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Médio</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Alto</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {data.resultados.map((r, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-sm text-gray-900">{r.dominio}</td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{Number(r.media_score).toFixed(1)}</td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        r.categoria === 'alto' ? 'bg-green-100 text-green-800' :
-                        r.categoria === 'medio' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {r.categoria.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">{r.total}</td>
-                  </tr>
+                  <Fragment key={idx}>
+                    <tr className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm text-gray-900">{r.grupo}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{r.dominio}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{Number(r.media_score).toFixed(1)}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{r.baixo}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{r.medio}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{r.alto}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">{r.total}</td>
+                    </tr>
+                    <tr className="bg-gray-50">
+                      <td colSpan={3} className="px-6 py-2 text-xs text-gray-500"></td>
+                      <td className="px-6 py-2 text-xs text-gray-500">{r.total > 0 ? ((r.baixo / r.total) * 100).toFixed(1) + '%' : '0%'}</td>
+                      <td className="px-6 py-2 text-xs text-gray-500">{r.total > 0 ? ((r.medio / r.total) * 100).toFixed(1) + '%' : '0%'}</td>
+                      <td className="px-6 py-2 text-xs text-gray-500">{r.total > 0 ? ((r.alto / r.total) * 100).toFixed(1) + '%' : '0%'}</td>
+                      <td className="px-6 py-2 text-xs text-gray-500"></td>
+                    </tr>
+                  </Fragment>
                 ))}
+                {/* Linhas de total geral */}
+                {(() => {
+                  const totalBaixo = data.resultados.reduce((sum, r) => sum + Number(r.baixo), 0)
+                  const totalMedio = data.resultados.reduce((sum, r) => sum + Number(r.medio), 0)
+                  const totalAlto = data.resultados.reduce((sum, r) => sum + Number(r.alto), 0)
+                  const totalGeral = totalBaixo + totalMedio + totalAlto
+                  return (
+                    <Fragment>
+                      <tr className="bg-blue-50 font-semibold">
+                        <td colSpan={3} className="px-6 py-4 text-sm text-gray-900">Total Geral</td>
+                        <td className="px-6 py-4 text-sm text-gray-900">{totalBaixo}</td>
+                        <td className="px-6 py-4 text-sm text-gray-900">{totalMedio}</td>
+                        <td className="px-6 py-4 text-sm text-gray-900">{totalAlto}</td>
+                        <td className="px-6 py-4 text-sm text-gray-900">{totalGeral}</td>
+                      </tr>
+                      <tr className="bg-blue-100">
+                        <td colSpan={3} className="px-6 py-2 text-xs text-gray-600">Percentual Geral</td>
+                        <td className="px-6 py-2 text-xs text-gray-600">{totalGeral > 0 ? ((totalBaixo / totalGeral) * 100).toFixed(1) + '%' : '0%'}</td>
+                        <td className="px-6 py-2 text-xs text-gray-600">{totalGeral > 0 ? ((totalMedio / totalGeral) * 100).toFixed(1) + '%' : '0%'}</td>
+                        <td className="px-6 py-2 text-xs text-gray-600">{totalGeral > 0 ? ((totalAlto / totalGeral) * 100).toFixed(1) + '%' : '0%'}</td>
+                        <td className="px-6 py-2 text-xs text-gray-600"></td>
+                      </tr>
+                    </Fragment>
+                  )
+                })()}
               </tbody>
             </table>
           </div>

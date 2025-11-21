@@ -9,7 +9,14 @@ interface FormGroupProps {
   onChange: (itemId: string, valor: number) => void
 }
 
+import { useMemo } from 'react'
+
 export default function FormGroup({ grupo, respostas, onChange }: FormGroupProps) {
+  // Calcula o índice da próxima questão a ser respondida
+  const nextIndex = useMemo(() => {
+    return grupo.itens.findIndex((item) => !respostas.has(item.id));
+  }, [grupo.itens, respostas]);
+
   return (
     <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
       <div className="mb-4 sm:mb-6">
@@ -18,15 +25,30 @@ export default function FormGroup({ grupo, respostas, onChange }: FormGroupProps
       </div>
 
       <div className="space-y-2">
-        {grupo.itens.map((item) => (
-          <RadioScale
-            key={item.id}
-            questionId={item.id}
-            questionText={item.texto}
-            value={respostas.get(item.id) ?? null}
-            onChange={(valor) => onChange(item.id, valor)}
-          />
-        ))}
+        {grupo.itens.map((item, idx) => {
+          // Só exibe se for a próxima a responder ou já respondida
+          const liberada = idx <= nextIndex;
+          const respondida = respostas.has(item.id);
+          const desabilitada = idx < nextIndex;
+          return liberada ? (
+            <div
+              key={item.id}
+              className={
+                desabilitada
+                  ? 'opacity-50 pointer-events-none select-none'
+                  : ''
+              }
+            >
+              <RadioScale
+                questionId={item.id}
+                questionText={item.texto}
+                value={respostas.get(item.id) ?? null}
+                onChange={desabilitada ? () => {} : (valor) => onChange(item.id, valor)}
+                required
+              />
+            </div>
+          ) : null;
+        })}
       </div>
 
       <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-blue-50 rounded-lg">

@@ -5,12 +5,13 @@ import { useRouter, useParams } from 'next/navigation'
 import Header from '@/components/Header'
 import FormGroup from '@/components/FormGroup'
 import ProgressBar from '@/components/ProgressBar'
-import { grupos } from '@/lib/questoes'
+import { getQuestoesPorNivel } from '@/lib/questoes'
 
 interface Session {
   cpf: string
   nome: string
   perfil: 'funcionario' | 'rh' | 'admin'
+  nivelCargo?: 'operacional' | 'gestao'
 }
 
 // Funções para gerenciar grupo de retomada no sessionStorage
@@ -45,6 +46,8 @@ export default function AvaliacaoGrupoPage() {
   const [error, setError] = useState('')
   const [grupoRetomada, setGrupoRetomada] = useState<number | null>(() => getGrupoRetomadaFromStorage())
 
+  // Obter questões baseadas no nível do funcionário
+  const grupos = session?.nivelCargo ? getQuestoesPorNivel(session.nivelCargo) : getQuestoesPorNivel('operacional')
   const grupo = grupos.find(g => g.id === grupoId)
   const totalGrupos = grupos.length
 
@@ -109,12 +112,50 @@ export default function AvaliacaoGrupoPage() {
     }
   }
 
-  const handleRespostaChange = (itemId: string, valor: number) => {
+  const handleRespostaChange = async (itemId: string, valor: number) => {
     setRespostas(prev => {
       const newMap = new Map(prev)
       newMap.set(itemId, valor)
       return newMap
     })
+
+    // Se respondeu a última questão do grupo, salva e avança automaticamente
+    if (grupo) {
+      const todasRespondidas = grupo.itens.every(item =>
+        item.id === itemId ? true : respostas.has(item.id)
+      );
+      if (todasRespondidas) {
+        setTimeout(async () => {
+          setSaving(true)
+          try {
+            const respostasArray = Array.from(respostas.entries()).map(([item, valor]) => ({
+              item,
+              valor,
+              grupo: grupoId,
+            }))
+            // Inclui a última resposta
+            respostasArray.push({ item: itemId, valor, grupo: grupoId })
+            const response = await fetch('/api/avaliacao/save', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ grupo: grupoId, respostas: respostasArray }),
+            })
+            if (!response.ok) throw new Error('Erro ao salvar respostas')
+            if (grupoId < totalGrupos) {
+              router.push(`/avaliacao/grupo/${grupoId + 1}`)
+            } else {
+              await fetch('/api/avaliacao/finalizar', { method: 'POST' })
+              clearGrupoRetomadaFromStorage()
+              router.push('/avaliacao/concluida')
+            }
+          } catch (err: any) {
+            setError(err.message)
+          } finally {
+            setSaving(false)
+          }
+        }, 300) // pequeno delay para UX
+      }
+    }
   }
 
   const validateGroup = (): boolean => {
@@ -173,10 +214,16 @@ export default function AvaliacaoGrupoPage() {
 
 
   const handleVoltar = () => {
-    console.log('handleVoltar - grupoRetomada:', grupoRetomada, 'grupoId:', grupoId, 'destino:', grupoId - 1)
+    // Impede voltar para grupos já totalmente respondidos
+    if (grupo) {
+      const todasRespondidas = grupo.itens.every(item => respostas.has(item.id));
+      if (todasRespondidas) {
+        // Não permite voltar
+        return;
+      }
+    }
     // Bloqueia voltar para grupo anterior ao ponto de retomada
     if (grupoRetomada !== null && (grupoId - 1) < grupoRetomada) {
-      console.log('Bloqueando navegação - tentativa de ir para grupo anterior à retomada')
       return;
     }
     if (grupoId > 1) {
@@ -196,7 +243,7 @@ export default function AvaliacaoGrupoPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header userName={session.nome} userRole={session.perfil} />
+
       
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">

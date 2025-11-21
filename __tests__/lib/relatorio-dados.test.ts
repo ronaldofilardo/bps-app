@@ -41,34 +41,34 @@ describe('Relatório Dados', () => {
 
     it('deve conter grupos específicos do COPSOQ III', () => {
       const nomes = dadosRelatorio.map(grupo => grupo.nome)
-      
+
       expect(nomes).toContain('Demandas do Trabalho')
-      expect(nomes).toContain('Influência e Desenvolvimento')
-      expect(nomes).toContain('Relações e Liderança')
-      expect(nomes).toContain('Conflito Trabalho-Família e Segurança')
+      expect(nomes).toContain('Organização e Conteúdo do Trabalho')
+      expect(nomes).toContain('Relações Interpessoais e Liderança')
+      expect(nomes).toContain('Interface Trabalho-Indivíduo')
+      expect(nomes).toContain('Valores no Trabalho')
+      expect(nomes).toContain('Personalidade (Opcional)')
       expect(nomes).toContain('Saúde e Bem-Estar')
       expect(nomes).toContain('Comportamentos Ofensivos')
-      expect(nomes).toContain('Jogos de Azar')
-      expect(nomes).toContain('Endividamento Social')
-      expect(nomes).toContain('Suporte Organizacional')
-      expect(nomes).toContain('Engajamento e Propósito')
+      expect(nomes).toContain('Jogos de Apostas')
+      expect(nomes).toContain('Endividamento')
     })
 
     it('deve conter explicações específicas para cada grupo', () => {
-      // Grupo 1 - Demandas
+      // Grupo 1 - Demandas do Trabalho
       const grupo1 = dadosRelatorio.find(g => g.id === 1)
       expect(grupo1?.nome).toBe('Demandas do Trabalho')
       expect(grupo1?.explicacao).toContain('sobrecarregar você física ou mentalmente')
-      
-      // Grupo 7 - Suporte Organizacional
+
+      // Grupo 7 - Saúde e Bem-Estar
       const grupo7 = dadosRelatorio.find(g => g.id === 7)
-      expect(grupo7?.nome).toBe('Suporte Organizacional')
-      expect(grupo7?.explicacao).toContain('recursos')
-      
-      // Grupo 8 - Engajamento e Propósito
-      const grupo8 = dadosRelatorio.find(g => g.id === 8)
-      expect(grupo8?.nome).toBe('Engajamento e Propósito')
-      expect(grupo8?.explicacao).toContain('Orgulho')
+      expect(grupo7?.nome).toBe('Saúde e Bem-Estar')
+      expect(grupo7?.explicacao).toContain('fisicamente e mentalmente')
+
+      // Grupo 6 - Personalidade (Opcional)
+      const grupo6 = dadosRelatorio.find(g => g.id === 6)
+      expect(grupo6?.nome).toBe('Personalidade (Opcional)')
+      expect(grupo6?.explicacao).toContain('Orgulho do que faz')
     })
   })
 
@@ -77,14 +77,14 @@ describe('Relatório Dados', () => {
       const grupo1 = getRelatorioGrupo(1)
       expect(grupo1?.id).toBe(1)
       expect(grupo1?.nome).toBe('Demandas do Trabalho')
-      
+
       const grupo7 = getRelatorioGrupo(7)
       expect(grupo7?.id).toBe(7)
-      expect(grupo7?.nome).toBe('Suporte Organizacional')
-      
+      expect(grupo7?.nome).toBe('Saúde e Bem-Estar')
+
       const grupo10 = getRelatorioGrupo(10)
       expect(grupo10?.id).toBe(10)
-      expect(grupo10?.nome).toBe('Endividamento Social')
+      expect(grupo10?.nome).toBe('Endividamento')
     })
 
     it('deve retornar undefined para ID inexistente', () => {
@@ -123,11 +123,11 @@ describe('Relatório Dados', () => {
       expect(getRecomendacao(1, 'invalida')).toBe('')
     })
 
-    it('deve ter recomendações específicas para Jogos de Azar', () => {
+    it('deve ter recomendações específicas para Jogos de Apostas', () => {
       const baixo = getRecomendacao(9, 'baixo')
       const medio = getRecomendacao(9, 'medio')
       const alto = getRecomendacao(9, 'alto')
-      
+
       expect(baixo).toContain('Ótimo! Você não tem risco com jogos')
       expect(medio).toContain('Atenção. Você tem algum hábito de aposta')
       expect(alto).toContain('Vamos redirecionar sua energia')

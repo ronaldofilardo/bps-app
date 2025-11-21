@@ -2,7 +2,7 @@
 
 ## Visão Geral do Sistema
 
-**BPS Brasil** é um Progressive Web App (PWA) completo para avaliação psicossocial baseado no questionário COPSOQ III (versão média), com módulos integrados de Jogos de Azar (JZ) e Endividamento Financeiro (EF).
+**BPS Brasil** é um Progressive Web App (PWA) completo para avaliação psicossocial baseado no questionário COPSOQ III (versão média), com módulos integrados de Jogos de Apostas e Endividamento Financeiro.
 
 ---
 
@@ -34,13 +34,13 @@
 | 1     | Demandas no Trabalho         | 11    | Negativa |
 | 2     | Organização e Conteúdo       | 8     | Positiva |
 | 3     | Relações Interpessoais       | 9     | Positiva |
-| 4     | Interface Trabalho-Indivíduo | 6     | Mista    |
+| 4     | Interface Trabalho-Indivíduo | 6     | Negativa |
 | 5     | Valores no Trabalho          | 8     | Positiva |
 | 6     | Personalidade (opcional)     | 5     | Positiva |
 | 7     | Saúde e Bem-Estar            | 8     | Negativa |
 | 8     | Comportamentos Ofensivos     | 3     | Negativa |
-| 9     | **Jogos de Azar (JZ)**       | 6     | Negativa |
-| 10    | **Endividamento (EF)**       | 6     | Negativa |
+| 9     | **Jogos de Apostas**         | 6     | Negativa |
+| 10    | **Endividamento**            | 6     | Negativa |
 
 **Total**: 70 itens | **Tempo**: 15-20 minutos
 

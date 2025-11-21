@@ -12,7 +12,7 @@ interface Resultado {
   dominio: string
   score: number
   categoria: 'baixo' | 'medio' | 'alto'
-  tipo: 'positiva' | 'negativa' | 'mista'
+  tipo: 'positiva' | 'negativa'
 }
 
 
@@ -84,22 +84,44 @@ export default function AvaliacaoConcluidaPage() {
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100 p-2 sm:p-4">
       <div className="max-w-4xl mx-auto px-2 sm:px-0">
         <div className="bg-white rounded-lg shadow-xl p-4 sm:p-8 mb-4 sm:mb-6 text-center">
-          <div className="mb-4 sm:mb-6">
-            <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 bg-success rounded-full flex items-center justify-center">
-              <svg className="w-8 h-8 sm:w-12 sm:h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-          </div>
+           <div className="mb-4 sm:mb-6">
+             <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 bg-success rounded-full flex items-center justify-center">
+               <svg className="w-8 h-8 sm:w-12 sm:h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+               </svg>
+             </div>
+           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4">
-            Avaliação Concluída!
-          </h1>
+           <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-4">
+             Avaliação Concluída!
+           </h1>
 
-          <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6">
-            Obrigado por completar a avaliação psicossocial BPS Brasil.
-          </p>
-        </div>
+           <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6">
+             Obrigado por completar a avaliação psicossocial BPS Brasil.
+           </p>
+
+           {/* Botões de ação no topo */}
+           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center mb-4 sm:mb-6">
+             <button
+               onClick={() => {
+                 if (prontoParaImprimir) {
+                   window.print();
+                 }
+               }}
+               disabled={!prontoParaImprimir}
+               className={`bg-blue-600 text-white py-2 px-4 sm:px-6 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm sm:text-base ${!prontoParaImprimir ? 'opacity-50 cursor-not-allowed' : ''}`}
+             >
+               🖨️ Imprimir
+             </button>
+
+             <button
+               onClick={() => router.push('/dashboard')}
+               className="bg-primary text-white py-2 px-4 sm:px-6 rounded-lg hover:bg-primary-hover transition-colors flex items-center justify-center gap-2 text-sm sm:text-base"
+             >
+               ← Voltar ao Dashboard
+             </button>
+           </div>
+         </div>
 
         {/* Gráfico de Resultados */}
         <div className="px-2 sm:px-0">
@@ -143,15 +165,22 @@ export default function AvaliacaoConcluidaPage() {
                       <h3 className="grupo-titulo text-lg sm:text-xl font-bold">
                         Grupo {resultado.grupo}: {dadosGrupo?.nome || resultado.dominio}
                       </h3>
-                      <div
-                        className={`categoria-badge px-3 sm:px-4 py-1 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-white border-2 border-white ${
-                          resultado.categoria === 'baixo' ? 'categoria-baixo' :
-                          resultado.categoria === 'medio' ? 'categoria-medio' : 'categoria-alto'
-                        }`}
-                        style={{ backgroundColor: getCorSemaforo(resultado.categoria, resultado.tipo) }}
-                      >
-                        {getTextoCategoria(resultado.categoria, resultado.tipo)}
-                      </div>
+                      {(() => {
+                        const textoCategoria = getTextoCategoria(resultado.categoria, resultado.tipo);
+                        let corBadge = '';
+                        if (textoCategoria === 'Excelente') corBadge = '#10B981'; // verde
+                        else if (textoCategoria === 'Precisa Melhorar') corBadge = '#EF4444'; // vermelho
+                        else if (textoCategoria === 'Adequado') corBadge = '#F59E0B'; // amarelo
+                        else corBadge = getCorSemaforo(resultado.categoria, resultado.tipo);
+                        return (
+                          <div
+                            className={`categoria-badge px-3 sm:px-4 py-1 sm:py-2 rounded-full text-xs sm:text-sm font-bold text-white border-2 border-white`}
+                            style={{ backgroundColor: corBadge }}
+                          >
+                            {textoCategoria}
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div className="pontuacao text-base sm:text-lg font-semibold">
                       Sua Pontuação: {Number(resultado.score).toFixed(1)}%
@@ -183,26 +212,27 @@ export default function AvaliacaoConcluidaPage() {
                      )}
 
                     {/* Recomendação Específica */}
-                    <div className={`border-l-4 p-3 sm:p-4 rounded-r-lg ${
-                      getCorSemaforo(resultado.categoria, resultado.tipo) === '#EF4444' ? 'secao-recomendacao-alto bg-red-50 border-red-400' :
-                      getCorSemaforo(resultado.categoria, resultado.tipo) === '#F59E0B' ? 'secao-recomendacao-medio bg-yellow-50 border-yellow-400' :
-                      'secao-recomendacao-baixo bg-green-50 border-green-400'
-                    }`}>
-                      <h4 className={`secao-titulo font-bold mb-2 text-sm sm:text-base ${
-                        getCorSemaforo(resultado.categoria, resultado.tipo) === '#EF4444' ? 'secao-titulo-vermelho text-red-800' :
-                        getCorSemaforo(resultado.categoria, resultado.tipo) === '#F59E0B' ? 'secao-titulo-amarelo text-yellow-800' :
-                        'secao-titulo-verde text-green-800'
-                      }`}>
-                        🎯 Seu Plano de Ação Personalizado
-                      </h4>
-                      <p className={`secao-texto text-xs sm:text-sm leading-relaxed whitespace-pre-line ${
-                        getCorSemaforo(resultado.categoria, resultado.tipo) === '#EF4444' ? 'secao-texto-vermelho text-red-700' :
-                        getCorSemaforo(resultado.categoria, resultado.tipo) === '#F59E0B' ? 'secao-texto-amarelo text-yellow-700' :
-                        'secao-texto-verde text-green-700'
-                      }`}>
-                        {recomendacao}
-                      </p>
-                    </div>
+                    {(() => {
+                      const textoCategoria = getTextoCategoria(resultado.categoria, resultado.tipo);
+                      let corBg = '', corBorder = '', corTitulo = '', corTexto = '';
+                      if (textoCategoria === 'Excelente') {
+                        corBg = 'bg-green-50'; corBorder = 'border-green-400'; corTitulo = 'text-green-800'; corTexto = 'text-green-700';
+                      } else if (textoCategoria === 'Precisa Melhorar') {
+                        corBg = 'bg-red-50'; corBorder = 'border-red-400'; corTitulo = 'text-red-800'; corTexto = 'text-red-700';
+                      } else {
+                        corBg = 'bg-yellow-50'; corBorder = 'border-yellow-400'; corTitulo = 'text-yellow-800'; corTexto = 'text-yellow-700';
+                      }
+                      return (
+                        <div className={`border-l-4 p-3 sm:p-4 rounded-r-lg ${corBg} ${corBorder}`}>
+                          <h4 className={`secao-titulo font-bold mb-2 text-sm sm:text-base ${corTitulo}`}>
+                            🎯 Seu Plano de Ação Personalizado
+                          </h4>
+                          <p className={`secao-texto text-xs sm:text-sm leading-relaxed whitespace-pre-line ${corTexto}`}>
+                            {recomendacao}
+                          </p>
+                        </div>
+                      );
+                    })()}
 
                     {/* Barra de Progresso Visual */}
                     <div className="progress-container bg-gray-200 rounded-full h-3 sm:h-4 overflow-hidden">
@@ -293,20 +323,20 @@ export default function AvaliacaoConcluidaPage() {
               <tbody>
                 <tr>
                   <td className="border border-gray-300 p-2 font-semibold text-green-700">Verde (Baixo Risco)</td>
-                  <td className="border border-gray-300 p-2">{">"} 75 (bom suporte/influência)</td>
-                  <td className="border border-gray-300 p-2">{"<"} 25 (pouco estresse)</td>
+                  <td className="border border-gray-300 p-2">{">"} 66 (bom suporte/influência)</td>
+                  <td className="border border-gray-300 p-2">{"<"} 33 (pouco estresse)</td>
                   <td className="border border-gray-300 p-2">Manter; monitorar anualmente</td>
                 </tr>
                 <tr>
                   <td className="border border-gray-300 p-2 font-semibold text-yellow-700">Amarelo (Risco Médio)</td>
-                  <td className="border border-gray-300 p-2">50-75 (moderado)</td>
-                  <td className="border border-gray-300 p-2">25-50 (moderado)</td>
+                  <td className="border border-gray-300 p-2">33-66 (moderado)</td>
+                  <td className="border border-gray-300 p-2">33-66 (moderado)</td>
                   <td className="border border-gray-300 p-2">Atenção; intervenções preventivas (treinamentos)</td>
                 </tr>
                 <tr>
                   <td className="border border-gray-300 p-2 font-semibold text-red-700">Vermelho (Alto Risco)</td>
-                  <td className="border border-gray-300 p-2">{"<"} 50 (baixo)</td>
-                  <td className="border border-gray-300 p-2">{">"} 50 (alto)</td>
+                  <td className="border border-gray-300 p-2">{"<"} 33 (baixo)</td>
+                  <td className="border border-gray-300 p-2">{">"} 66 (alto)</td>
                   <td className="border border-gray-300 p-2">Ação imediata; plano de mitigação (PGR/NR-1)</td>
                 </tr>
               </tbody>
@@ -315,31 +345,31 @@ export default function AvaliacaoConcluidaPage() {
         </div>
 
         <div className="botoes-acao no-print text-center space-y-3 sm:space-y-4 px-2 sm:px-0">
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
-            <button
-              onClick={() => {
-                if (prontoParaImprimir) {
-                  window.print();
-                }
-              }}
-              disabled={!prontoParaImprimir}
-              className={`bg-blue-600 text-white py-3 px-4 sm:px-6 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm sm:text-base w-full sm:w-auto ${!prontoParaImprimir ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              🖨️ Imprimir Relatório
-            </button>
+           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
+             <button
+               onClick={() => {
+                 if (prontoParaImprimir) {
+                   window.print();
+                 }
+               }}
+               disabled={!prontoParaImprimir}
+               className={`bg-blue-600 text-white py-3 px-4 sm:px-6 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm sm:text-base w-full sm:w-auto ${!prontoParaImprimir ? 'opacity-50 cursor-not-allowed' : ''}`}
+             >
+               🖨️ Imprimir
+             </button>
 
-            <button
-              onClick={() => router.push('/dashboard')}
-              className="bg-primary text-white py-3 px-4 sm:px-6 rounded-lg hover:bg-primary-hover transition-colors flex items-center justify-center gap-2 text-sm sm:text-base w-full sm:w-auto"
-            >
-              🏠 Voltar ao Início
-            </button>
-          </div>
+             <button
+               onClick={() => router.push('/dashboard')}
+               className="bg-primary text-white py-3 px-4 sm:px-6 rounded-lg hover:bg-primary-hover transition-colors flex items-center justify-center gap-2 text-sm sm:text-base w-full sm:w-auto"
+             >
+               ← Voltar
+             </button>
+           </div>
 
-          <p className="text-xs sm:text-sm text-gray-600 mt-3 sm:mt-4">
-            💾 Este relatório ficará disponível no seu dashboard para consulta futura
-          </p>
-        </div>
+           <p className="text-xs sm:text-sm text-gray-600 mt-3 sm:mt-4">
+             💾 Este relatório ficará disponível no seu dashboard para consulta futura
+           </p>
+         </div>
       </div>
     </div>
   )

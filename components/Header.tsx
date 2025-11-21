@@ -1,52 +1,122 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+
 
 interface HeaderProps {
-  userName: string
-  userRole: 'funcionario' | 'rh' | 'admin'
+  userName?: string;
+  userRole?: 'funcionario' | 'rh' | 'admin' | 'master';
+  nivelCargo?: 'operacional' | 'gestao';
 }
 
-export default function Header({ userName, userRole }: HeaderProps) {
+interface Session {
+  cpf: string;
+  nome: string;
+  perfil: 'funcionario' | 'rh' | 'admin' | 'master';
+  nivelCargo?: 'operacional' | 'gestao';
+}
+
+export default function Header({ userName, userRole, nivelCargo }: HeaderProps) {
   const router = useRouter()
+  const [session, setSession] = useState<Session | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!userName || !userRole) {
+      fetchSession()
+    } else {
+      setLoading(false)
+    }
+  }, [userName, userRole])
+
+  // Função para atualizar sessão (pode ser chamada externamente se necessário)
+  const refreshSession = () => {
+    fetchSession()
+  }
+
+  const fetchSession = async () => {
+    try {
+      const response = await fetch('/api/auth/session')
+      if (response.ok) {
+        const data = await response.json()
+        setSession(data)
+      }
+    } catch (error) {
+      console.error('Erro ao buscar sessão:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleLogout = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/login')
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+      setSession(null) // Limpa a sessão local imediatamente
+      router.push('/login')
+    } catch (error) {
+      router.push('/login')
+    }
   }
 
-  const getRoleName = (role: string) => {
-    const roles = {
-      funcionario: 'Funcionário',
-      rh: 'RH',
-      admin: 'Administrador',
-    }
-    return roles[role as keyof typeof roles] || role
+  const getUserDisplayName = (name: string, role: string, nivelCargo?: string) => {
+    return name
   }
+
+  if (loading) {
+    return null;
+  }
+
+  // Prioriza props, se não existirem usa session
+  const nome = userName || session?.nome;
+  const perfil = userRole || session?.perfil;
+  const nivel = nivelCargo || session?.nivelCargo;
 
   return (
-    <header className="bg-primary text-white shadow-lg">
-      <div className="container mx-auto px-2 sm:px-4 py-2 sm:py-4">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-2 sm:space-y-0">
-          <div className="text-center sm:text-left">
-            <h1 className="text-xl sm:text-2xl font-bold">BPS Brasil</h1>
-            <p className="text-xs sm:text-sm opacity-90">COPSOQ III - Avaliação Psicossocial</p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4">
-            <div className="text-center sm:text-right">
-              <p className="font-semibold text-sm sm:text-base">{userName}</p>
-              <p className="text-xs opacity-90">{getRoleName(userRole)}</p>
-            </div>
-
-            <button
-              onClick={handleLogout}
-              className="bg-white text-primary px-3 sm:px-4 py-1 sm:py-2 rounded-md hover:bg-gray-100 transition-colors text-sm sm:text-base w-full sm:w-auto"
-            >
-              Sair
-            </button>
-          </div>
-        </div>
+    <header
+      style={{
+        background: '#111',
+        color: 'white',
+        borderBottom: '4px solid #FF6B00',
+        padding: '0 32px',
+        position: 'sticky',
+        top: 0,
+        zIndex: 1000,
+        width: '100%',
+        minHeight: 64,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        boxSizing: 'border-box',
+      }}
+    >
+      <div style={{ fontWeight: 'bold', fontSize: 22, letterSpacing: 0.5 }}>
+        {perfil === 'master' ? 'Master Admin' : 'Administração'}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        {nome && (
+          <span style={{ fontWeight: 'bold', fontSize: 16 }}>
+            {getUserDisplayName(nome, perfil || '', nivel)}
+          </span>
+        )}
+        <button
+          id="btn-sair"
+          onClick={handleLogout}
+          style={{
+            background: '#FF6B00',
+            color: 'white',
+            fontWeight: 'bold',
+            border: 'none',
+            borderRadius: 8,
+            padding: '8px 24px',
+            fontSize: 16,
+            cursor: 'pointer',
+            marginLeft: nome ? 16 : 0,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+          }}
+        >
+          SAIR
+        </button>
       </div>
     </header>
   )

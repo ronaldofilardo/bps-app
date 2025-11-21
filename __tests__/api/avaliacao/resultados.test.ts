@@ -14,8 +14,8 @@ jest.mock('@/lib/questoes', () => ({
   grupos: [
     { id: 1, dominio: 'Demandas no Trabalho', tipo: 'negativa' },
     { id: 2, dominio: 'Organização e Conteúdo', tipo: 'positiva' },
-    { id: 9, dominio: 'Comportamento de Jogo', tipo: 'mista' },
-    { id: 10, dominio: 'Endividamento Financeiro', tipo: 'mista' },
+    { id: 9, dominio: 'Comportamento de Jogo', tipo: 'negativa' },
+    { id: 10, dominio: 'Endividamento Financeiro', tipo: 'negativa' },
   ],
 }))
 

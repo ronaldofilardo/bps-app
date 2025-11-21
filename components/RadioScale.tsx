@@ -52,7 +52,7 @@ export default function RadioScale({
                   <div className="w-2 h-2 xs:w-3 xs:h-3 rounded-full bg-white"></div>
                 )}
               </div>
-              <span className="text-xs mt-1 text-gray-600 hidden xs:block">{label}</span>
+              <span className="text-xs mt-1 text-gray-600">{label}</span>
             </button>
           ))}
         </div>

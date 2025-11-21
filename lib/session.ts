@@ -5,7 +5,8 @@ import { cookies } from 'next/headers'
 export interface Session {
   cpf: string
   nome: string
-  perfil: 'funcionario' | 'rh' | 'admin'
+  perfil: 'funcionario' | 'rh' | 'admin' | 'master'
+  nivelCargo?: 'operacional' | 'gestao'
 }
 
 // Criar sessão (armazenar em cookie seguro)
@@ -47,23 +48,28 @@ export async function destroySession(): Promise<void> {
 }
 
 // Verificar se usuário está autenticado
+// Verificar se usuário está autenticado
 export async function requireAuth(): Promise<Session> {
   const session = await getSession()
-  
+
   if (!session) {
+    console.log('[DEBUG] requireAuth: Sessão não encontrada')
     throw new Error('Não autenticado')
   }
-  
+
+  console.log('[DEBUG] requireAuth: Sessão válida para', session.cpf)
   return session
 }
 
 // Verificar perfil específico
-export async function requireRole(role: 'rh' | 'admin'): Promise<Session> {
+export async function requireRole(role: 'rh' | 'admin' | 'master'): Promise<Session> {
   const session = await requireAuth()
-  
-  if (session.perfil !== role && session.perfil !== 'admin') {
+
+  if (session.perfil !== role && session.perfil !== 'admin' && session.perfil !== 'master') {
+    console.log(`[DEBUG] requireRole: Perfil ${session.perfil} não autorizado para role ${role}`)
     throw new Error('Sem permissão')
   }
-  
+
+  console.log(`[DEBUG] requireRole: Acesso autorizado para ${session.cpf} com perfil ${session.perfil}`)
   return session
 }
