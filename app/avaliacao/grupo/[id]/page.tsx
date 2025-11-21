@@ -213,25 +213,6 @@ export default function AvaliacaoGrupoPage() {
   }
 
 
-  const handleVoltar = () => {
-    // Impede voltar para grupos já totalmente respondidos
-    if (grupo) {
-      const todasRespondidas = grupo.itens.every(item => respostas.has(item.id));
-      if (todasRespondidas) {
-        // Não permite voltar
-        return;
-      }
-    }
-    // Bloqueia voltar para grupo anterior ao ponto de retomada
-    if (grupoRetomada !== null && (grupoId - 1) < grupoRetomada) {
-      return;
-    }
-    if (grupoId > 1) {
-      router.push(`/avaliacao/grupo/${grupoId - 1}`)
-    } else {
-      router.push('/dashboard')
-    }
-  }
 
   if (loading || !session || !grupo) {
     return (
@@ -261,20 +242,7 @@ export default function AvaliacaoGrupoPage() {
             </div>
           )}
 
-          <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row sm:justify-between gap-3 sm:gap-0">
-
-            <button
-              onClick={handleVoltar}
-              className={`px-4 sm:px-6 py-3 border rounded-lg transition-colors text-sm sm:text-base ${
-                grupoRetomada !== null && (grupoId - 1) < grupoRetomada
-                  ? 'border-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-              }`}
-              disabled={grupoRetomada !== null && (grupoId - 1) < grupoRetomada}
-              title={grupoRetomada !== null && (grupoId - 1) < grupoRetomada ? 'Não é permitido voltar para grupos anteriores à retomada' : ''}
-            >
-              ← Voltar
-            </button>
+          <div className="mt-4 sm:mt-6 flex justify-end">
 
             <button
               onClick={handleSalvar}

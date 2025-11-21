@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
-import { query } from '@/lib/db'
+import { query, getDatabaseInfo } from '@/lib/db'
 import { createSession } from '@/lib/session'
 import bcrypt from 'bcryptjs'
 
 export async function POST(request: Request) {
   try {
+    console.log('Database info:', getDatabaseInfo())
     const { cpf, senha } = await request.json()
 
     // Validar entrada
@@ -21,6 +22,8 @@ export async function POST(request: Request) {
       [cpf]
     )
 
+    console.log(`Login attempt for CPF: ${cpf}, found: ${result.rows.length > 0}`)
+
     if (result.rows.length === 0) {
       return NextResponse.json(
         { error: 'CPF ou senha inválidos' },
@@ -29,6 +32,7 @@ export async function POST(request: Request) {
     }
 
     const funcionario = result.rows[0]
+    console.log(`User found: ${funcionario.nome}, perfil: ${funcionario.perfil}, ativo: ${funcionario.ativo}`)
 
     // Verificar se está ativo
     if (!funcionario.ativo) {
@@ -40,6 +44,7 @@ export async function POST(request: Request) {
 
     // Verificar senha
     const senhaValida = await bcrypt.compare(senha, funcionario.senha_hash)
+    console.log(`Password valid: ${senhaValida}`)
 
     if (!senhaValida) {
       return NextResponse.json(
