@@ -15,6 +15,20 @@ CREATE TABLE IF NOT EXISTS clinicas (
     atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Tabela de Empresas Clientes
+CREATE TABLE IF NOT EXISTS empresas_clientes (
+    id SERIAL PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    cnpj CHAR(14) UNIQUE,
+    email VARCHAR(100),
+    telefone VARCHAR(20),
+    endereco TEXT,
+    clinica_id INTEGER REFERENCES clinicas (id) ON DELETE CASCADE,
+    ativa BOOLEAN DEFAULT TRUE,
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Tabela de Funcionários (atualizada com perfil master)
 CREATE TABLE IF NOT EXISTS funcionarios (
     id SERIAL PRIMARY KEY,
@@ -32,6 +46,12 @@ CREATE TABLE IF NOT EXISTS funcionarios (
             'master'
         )
     ),
+    clinica_id INTEGER,
+    empresa_id INTEGER,
+    matricula VARCHAR(20),
+    nivel_cargo VARCHAR(20),
+    turno VARCHAR(50),
+    escala VARCHAR(50),
     ativo BOOLEAN DEFAULT TRUE,
     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -101,6 +121,16 @@ VALUES (
         '12345678000195',
         'contato@bpsbrasil.com.br',
         '(11) 99999-9999'
+    ) ON CONFLICT DO NOTHING;
+
+-- SEED: Inserir empresa cliente padrão
+INSERT INTO
+    empresas_clientes (nome, cnpj, email, clinica_id)
+VALUES (
+        'Indústria Metalúrgica São Paulo',
+        '11222333000144',
+        'contato@metalurgicasp.com.br',
+        1
     ) ON CONFLICT DO NOTHING;
 
 -- SEED: Master Admin (CPF: 00000000000, senha: master123)

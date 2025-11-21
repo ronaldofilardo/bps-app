@@ -1,7 +1,7 @@
 # Script PowerShell para sincronizar o banco Neon com o schema.sql local
 # Uso: ./sync-neon-db.ps1
 
-$schemaPath = "database/schema.sql"
+$schemaPath = "database/schema-clean-final.sql"
 $connString = "postgresql://neondb_owner:npg_8FNwPWA2mpcl@ep-holy-math-ac17vhfi-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 
 # Verifica se o psql está disponível
