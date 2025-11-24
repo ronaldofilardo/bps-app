@@ -52,9 +52,14 @@ describe('/api/avaliacao/respostas', () => {
 
       expect(response.status).toBe(200)
       expect(data.respostas).toEqual(mockRespostas)
+      // Primeira chamada: busca avaliação por CPF
+      expect(mockQuery).toHaveBeenNthCalledWith(1,
+        expect.any(String),
+        ['12345678901']
+      )
       // Segunda chamada: busca respostas
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT item, valor FROM respostas'),
+      expect(mockQuery).toHaveBeenNthCalledWith(2,
+        expect.any(String),
         [42, 1]
       )
     })

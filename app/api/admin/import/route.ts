@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs'
 
 export async function POST(request: Request) {
   try {
-    const session = await requireRole('admin')
+    const session = await requireRole('rh')
     const { funcionarios } = await request.json()
 
     if (!Array.isArray(funcionarios)) {

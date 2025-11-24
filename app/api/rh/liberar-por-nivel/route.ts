@@ -48,25 +48,12 @@ export async function POST(request: Request) {
     // Criar avaliações para todos os funcionários do nível
     for (const funcionario of funcionariosResult.rows) {
       try {
-        // Verificar se já existe avaliação ativa
-        const avaliacaoExistente = await query(
-          `SELECT id FROM avaliacoes 
-           WHERE funcionario_cpf = $1 AND status IN ('iniciada', 'em_andamento')`,
-          [funcionario.cpf]
-        )
-
-        if (avaliacaoExistente.rows.length > 0) {
-          avaliacoesExistentes++
-          continue
-        }
-
-        // Criar nova avaliação
+        // Sempre criar nova avaliação, independente de avaliações anteriores
         await query(
           `INSERT INTO avaliacoes (funcionario_cpf, status)
            VALUES ($1, 'iniciada')`,
           [funcionario.cpf]
         )
-        
         avaliacoesCreated++
       } catch (err) {
         console.error(`Erro ao criar avaliação para CPF ${funcionario.cpf}:`, err)

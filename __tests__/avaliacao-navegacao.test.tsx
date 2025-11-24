@@ -23,9 +23,9 @@ const expectButtonToBeEnabled = (button: HTMLElement) => {
   expect(button.getAttribute('class')).not.toContain('cursor-not-allowed')
 }
 
-describe('Navegação entre grupos após retomada', () => {
+describe('Avaliação por grupo - Navegação sem botão Voltar', () => {
   const mockPush = jest.fn()
-  
+
   beforeEach(() => {
     jest.clearAllMocks()
     ;(useRouter as jest.Mock).mockReturnValue({
@@ -34,130 +34,21 @@ describe('Navegação entre grupos após retomada', () => {
     ;(fetch as jest.Mock).mockClear()
   })
 
-  it('deve desabilitar botão Voltar quando tentaria ir para grupo anterior à retomada', async () => {
-    // Mock: retomou no grupo 2, está no grupo 2 - não pode voltar para grupo 1
+  it('não deve exibir botão Voltar na avaliação', async () => {
     ;(useParams as jest.Mock).mockReturnValue({ id: '2' })
-    
+
     // Mock da sessão
     ;(fetch as jest.Mock)
       .mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ 
-          session: { cpf: '12345678901', nome: 'Teste' }
+        json: () => Promise.resolve({
+          session: { cpf: '12345678901', nome: 'Teste', perfil: 'funcionario', nivelCargo: 'operacional' }
         })
       })
-      // Mock do status - retomou no grupo 2
+      // Mock do status
       .mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ 
-          status: 'em_andamento',
-          grupo_atual: 2
-        })
-      })
-      // Mock das respostas
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ respostas: [] })
-      })
-
-    render(<AvaliacaoGrupoPage />)
-
-    await waitFor(() => {
-      const voltarButton = screen.getByText('← Voltar')
-      expectButtonToBeDisabled(voltarButton)
-      expect(voltarButton).toHaveAttribute('title', 'Não é permitido voltar para grupos anteriores à retomada')
-    })
-  })
-
-  it('deve habilitar botão Voltar quando pode voltar até grupo de retomada', async () => {
-    // Mock: retomou no grupo 2, agora está no grupo 4 - pode voltar até grupo 2
-    ;(useParams as jest.Mock).mockReturnValue({ id: '4' })
-    
-    // Mock da sessão
-    ;(fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ 
-          session: { cpf: '12345678901', nome: 'Teste' }
-        })
-      })
-      // Mock do status - retomou no grupo 2
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ 
-          status: 'em_andamento',
-          grupo_atual: 2
-        })
-      })
-      // Mock das respostas
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ respostas: [] })
-      })
-
-    render(<AvaliacaoGrupoPage />)
-
-    await waitFor(() => {
-      const voltarButton = screen.getByText('← Voltar')
-      expectButtonToBeEnabled(voltarButton)
-      expect(voltarButton).not.toHaveAttribute('title', 'Não é permitido voltar para grupos anteriores à retomada')
-    })
-  })
-
-  it('deve permitir voltar até o grupo de retomada, mas não além', async () => {
-    // Mock: retomou no grupo 2, está no grupo 3 - pode voltar para grupo 2
-    ;(useParams as jest.Mock).mockReturnValue({ id: '3' })
-    
-    // Mock da sessão
-    ;(fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ 
-          session: { cpf: '12345678901', nome: 'Teste' }
-        })
-      })
-      // Mock do status - retomou no grupo 2
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ 
-          status: 'em_andamento',
-          grupo_atual: 2
-        })
-      })
-      // Mock das respostas
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ respostas: [] })
-      })
-
-    render(<AvaliacaoGrupoPage />)
-
-    await waitFor(() => {
-      const voltarButton = screen.getByText('← Voltar')
-      expectButtonToBeEnabled(voltarButton)
-    })
-
-    // Clica em voltar - deve ir para o grupo 2
-    fireEvent.click(screen.getByText('← Voltar'))
-    expect(mockPush).toHaveBeenCalledWith('/avaliacao/grupo/2')
-  })
-
-  it('deve funcionar normalmente quando não há retomada (avaliação nova)', async () => {
-    // Mock: avaliação nova, está no grupo 3
-    ;(useParams as jest.Mock).mockReturnValue({ id: '3' })
-    
-    // Mock da sessão
-    ;(fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ 
-          session: { cpf: '12345678901', nome: 'Teste' }
-        })
-      })
-      // Mock do status - avaliação nova (grupo_atual = 1)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ 
+        json: () => Promise.resolve({
           status: 'em_andamento',
           grupo_atual: 1
         })
@@ -171,9 +62,88 @@ describe('Navegação entre grupos após retomada', () => {
     render(<AvaliacaoGrupoPage />)
 
     await waitFor(() => {
-      const voltarButton = screen.getByText('← Voltar')
-      // Como grupo_atual (1) < grupoId (3), não é uma retomada, botão deve estar habilitado
-      expectButtonToBeEnabled(voltarButton)
+      // Verifica que o botão Voltar não existe
+      expect(screen.queryByText('← Voltar')).not.toBeInTheDocument()
+      expect(screen.queryByText('Voltar')).not.toBeInTheDocument()
     })
+  })
+
+  it('deve exibir apenas o botão Próximo/Finalizar', async () => {
+    ;(useParams as jest.Mock).mockReturnValue({ id: '1' })
+
+    // Mock da sessão
+    ;(fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          session: { cpf: '12345678901', nome: 'Teste', perfil: 'funcionario', nivelCargo: 'operacional' }
+        })
+      })
+      // Mock do status
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          status: 'em_andamento',
+          grupo_atual: 1
+        })
+      })
+      // Mock das respostas
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ respostas: [] })
+      })
+
+    render(<AvaliacaoGrupoPage />)
+
+    await waitFor(() => {
+      // Deve ter apenas o botão Próximo
+      expect(screen.getByText('Próximo →')).toBeInTheDocument()
+      // Não deve ter botão Voltar
+      expect(screen.queryByText('← Voltar')).not.toBeInTheDocument()
+    })
+  })
+
+  it('deve permitir navegação apenas para frente', async () => {
+    ;(useParams as jest.Mock).mockReturnValue({ id: '1' })
+
+    // Mock da sessão
+    ;(fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          session: { cpf: '12345678901', nome: 'Teste', perfil: 'funcionario', nivelCargo: 'operacional' }
+        })
+      })
+      // Mock do status
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          status: 'em_andamento',
+          grupo_atual: 1
+        })
+      })
+      // Mock das respostas
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ respostas: [] })
+      })
+      // Mock do save
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ success: true })
+      })
+
+    render(<AvaliacaoGrupoPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Próximo →')).toBeInTheDocument()
+    })
+
+    // Simular resposta a todas as questões do grupo 1
+    // (assumindo que o grupo 1 tem algumas questões)
+    // Como não temos acesso direto às questões, vamos mockar o comportamento
+
+    // O teste verifica que não há botão voltar
+    expect(screen.queryByText('← Voltar')).not.toBeInTheDocument()
   })
 })

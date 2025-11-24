@@ -1,0 +1,5 @@
+app/api/avaliacao/status/route.ts
+app/api/avaliacao/respostas/route.ts
+app/api/avaliacao/finalizar/route.ts
+lib/questoes.ts
+lib/db.ts

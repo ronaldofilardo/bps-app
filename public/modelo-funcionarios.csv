@@ -1,0 +1,5 @@
+cpf,nome,setor,funcao,email,perfil,empresa_id,matricula,nivel_cargo,turno,escala
+12312312312,José da Silva,Produção,Soldador,jose.silva@empresa.com,funcionario,1,MAT005,operacional,Manhã,8x40
+45645645645,Ana Costa,Administrativo,Assistente,ana.costa@empresa.com,funcionario,1,MAT006,operacional,Tarde,8x40
+78978978978,Pedro Santos,Manutenção,Técnico,pedro.santos@empresa.com,funcionario,2,MAT007,operacional,Noite,12x36
+32132132132,Carla Oliveira,Engenharia,Engenheira,carla.oliveira@empresa.com,funcionario,2,MAT008,gestao,Comercial,8x44

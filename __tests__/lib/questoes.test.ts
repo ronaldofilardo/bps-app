@@ -87,7 +87,7 @@ describe('lib/questoes', () => {
       const questoes = getQuestoesPorNivel('operacional')
       const original = grupos[0]
       const retornado = questoes[0]
-      
+
       expect(retornado.id).toBe(original.id)
       expect(retornado.titulo).toBe(original.titulo)
       expect(retornado.tipo).toBe(original.tipo)
@@ -97,6 +97,56 @@ describe('lib/questoes', () => {
     it('deve lidar com níveis não especificados', () => {
       const questoes = getQuestoesPorNivel(undefined as any)
       expect(questoes).toHaveLength(10) // Deve retornar padrão
+    })
+
+    it('deve diferenciar texto das questões por nível', () => {
+      const operacional = getQuestoesPorNivel('operacional')
+      const gestao = getQuestoesPorNivel('gestao')
+
+      // Verificar que pelo menos algumas questões têm textos diferentes
+      let temDiferenca = false
+
+      operacional.forEach((grupoOp, index) => {
+        const grupoGest = gestao[index]
+        grupoOp.itens.forEach((itemOp, itemIndex) => {
+          const itemGest = grupoGest.itens[itemIndex]
+          if (itemOp.texto !== itemGest.texto) {
+            temDiferenca = true
+          }
+        })
+      })
+
+      expect(temDiferenca).toBe(true)
+    })
+
+    it('deve usar texto padrão quando não há textoGestao', () => {
+      const operacional = getQuestoesPorNivel('operacional')
+      const gestao = getQuestoesPorNivel('gestao')
+
+      // Para questões que não têm textoGestao, deve usar o texto padrão
+      operacional.forEach((grupoOp, index) => {
+        const grupoGest = gestao[index]
+        grupoOp.itens.forEach((itemOp, itemIndex) => {
+          const itemGest = grupoGest.itens[itemIndex]
+          // Se não tem textoGestao no original, deve ser igual
+          if (!grupos[index].itens[itemIndex].textoGestao) {
+            expect(itemOp.texto).toBe(itemGest.texto)
+          }
+        })
+      })
+    })
+
+    it('deve usar textoGestao quando disponível para nível gestão', () => {
+      const gestao = getQuestoesPorNivel('gestao')
+
+      gestao.forEach((grupo, grupoIndex) => {
+        grupo.itens.forEach((item, itemIndex) => {
+          const originalItem = grupos[grupoIndex].itens[itemIndex]
+          if (originalItem.textoGestao) {
+            expect(item.texto).toBe(originalItem.textoGestao)
+          }
+        })
+      })
     })
   })
 

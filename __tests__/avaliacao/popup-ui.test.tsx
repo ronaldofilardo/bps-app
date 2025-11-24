@@ -1,0 +1,425 @@
+/**
+ * Testes para interface de popup da avaliação
+ * Item 11: Popup exibe uma questão por tela
+ * Item 12: Não exibe números 0, ¼, ½, ¾, 100
+ * Item 13: Barra mostra "X de 70" e atualiza em tempo real
+ * Item 14: Próxima questão aparece automaticamente
+ */
+
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+
+// Mock do fetch global
+global.fetch = jest.fn()
+const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>
+
+// Mock do window.location
+delete (window as any).location
+window.location = { href: '', search: '?id=1' } as any
+
+describe('Avaliação - Interface Popup', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    window.location.search = '?id=1'
+  })
+
+  describe('Item 11: Popup exibe uma questão por tela', () => {
+    it('deve renderizar apenas uma questão por vez', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ nome: 'Test User' }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ status: 'iniciada', avaliacaoId: 1 }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ respostas: [], total: 0 }) 
+        } as Response)
+
+      const AvaliacaoPage = (await import('@/app/avaliacao/page')).default
+      render(<AvaliacaoPage />)
+
+      await waitFor(() => {
+        // Deve haver apenas um grupo de botões (uma questão)
+        const buttons = screen.getAllByRole('button')
+        // Deve ter exatamente 5 botões de opção (Nunca, Raramente, Às vezes, Quase sempre, Sempre)
+        const opcaoBotoes = buttons.filter(btn => 
+          btn.textContent?.match(/^(Nunca|Raramente|Às vezes|Quase sempre|Sempre)$/)
+        )
+        expect(opcaoBotoes.length).toBe(5)
+      })
+    })
+
+    it('deve exibir a questão completa com todas as opções', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ nome: 'Test User' }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ status: 'iniciada', avaliacaoId: 1 }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ respostas: [], total: 0 }) 
+        } as Response)
+
+      const AvaliacaoPage = (await import('@/app/avaliacao/page')).default
+      render(<AvaliacaoPage />)
+
+      await waitFor(() => {
+        // Deve ter 5 opções de resposta por questão
+        const buttons = screen.getAllByRole('button')
+        const opcaoBotoes = buttons.filter(btn => 
+          btn.textContent?.match(/^(Nunca|Raramente|Às vezes|Quase sempre|Sempre)$/)
+        )
+        expect(opcaoBotoes.length).toBe(5)
+      })
+    })
+
+    it('não deve mostrar múltiplas questões ao mesmo tempo', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ nome: 'Test User' }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ status: 'iniciada', avaliacaoId: 1 }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ respostas: [], total: 0 }) 
+        } as Response)
+
+      const AvaliacaoPage = (await import('@/app/avaliacao/page')).default
+      render(<AvaliacaoPage />)
+
+      await waitFor(() => {
+        const text = document.body.textContent || ''
+        // Não deve ter múltiplas questões numeradas visíveis
+        const matches = text.match(/questão \d+/gi) || []
+        expect(matches.length).toBeLessThanOrEqual(1)
+      })
+    })
+  })
+
+  describe('Item 12: Não exibe números 0, ¼, ½, ¾, 100', () => {
+    it('deve exibir labels descritivos ao invés de números', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ nome: 'Test User' }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ status: 'iniciada', avaliacaoId: 1 }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ respostas: [], total: 0 }) 
+        } as Response)
+
+      const AvaliacaoPage = (await import('@/app/avaliacao/page')).default
+      render(<AvaliacaoPage />)
+
+      await waitFor(() => {
+        // Deve ter labels descritivos
+        expect(screen.getByText('Nunca')).toBeInTheDocument()
+        expect(screen.getByText('Raramente')).toBeInTheDocument()
+        expect(screen.getByText('Às vezes')).toBeInTheDocument()
+        expect(screen.getByText('Quase sempre')).toBeInTheDocument()
+        expect(screen.getByText('Sempre')).toBeInTheDocument()
+      })
+    })
+
+    it('não deve exibir valores numéricos nas opções', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ nome: 'Test User' }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ status: 'iniciada', avaliacaoId: 1 }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ respostas: [], total: 0 }) 
+        } as Response)
+
+      const AvaliacaoPage = (await import('@/app/avaliacao/page')).default
+      render(<AvaliacaoPage />)
+
+      await waitFor(() => {
+        const text = document.body.textContent || ''
+        // Não deve exibir 0, 25, 50, 75, 100 como labels visíveis
+        expect(text).not.toContain('0%')
+        expect(text).not.toContain('25%')
+        expect(text).not.toContain('50%')
+        expect(text).not.toContain('75%')
+        expect(text).not.toContain('100%')
+      })
+    })
+
+    it('não deve exibir frações ¼, ½, ¾', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ nome: 'Test User' }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ status: 'iniciada', avaliacaoId: 1 }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ respostas: [], total: 0 }) 
+        } as Response)
+
+      const AvaliacaoPage = (await import('@/app/avaliacao/page')).default
+      render(<AvaliacaoPage />)
+
+      await waitFor(() => {
+        const text = document.body.textContent || ''
+        expect(text).not.toContain('¼')
+        expect(text).not.toContain('½')
+        expect(text).not.toContain('¾')
+      })
+    })
+  })
+
+  describe('Item 13: Barra mostra "X de 70" e atualiza em tempo real', () => {
+    it('deve exibir progresso no formato "X de 70"', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ nome: 'Test User' }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ status: 'iniciada', avaliacaoId: 1 }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ respostas: [], total: 0 }) 
+        } as Response)
+
+      const AvaliacaoPage = (await import('@/app/avaliacao/page')).default
+      render(<AvaliacaoPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText(/\d+ de 70/)).toBeInTheDocument()
+      })
+    })
+
+    it('deve iniciar com "1 de 70"', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ nome: 'Test User' }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ status: 'iniciada', avaliacaoId: 1 }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ respostas: [], total: 0 }) 
+        } as Response)
+
+      const AvaliacaoPage = (await import('@/app/avaliacao/page')).default
+      render(<AvaliacaoPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText('1 de 70')).toBeInTheDocument()
+      })
+    })
+
+    it('deve atualizar progresso após resposta', async () => {
+      const user = userEvent.setup()
+
+      mockFetch
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ nome: 'Test User' }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ status: 'iniciada', avaliacaoId: 1 }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ respostas: [], total: 0 }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ success: true }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ success: true }) 
+        } as Response)
+
+      const AvaliacaoPage = (await import('@/app/avaliacao/page')).default
+      render(<AvaliacaoPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText('1 de 70')).toBeInTheDocument()
+      })
+
+      // Clicar em uma opção (botão "Nunca")
+      const primeiraOpcao = screen.getByText('Nunca')
+      await user.click(primeiraOpcao)
+
+      await waitFor(() => {
+        expect(screen.getByText('2 de 70')).toBeInTheDocument()
+      })
+    })
+
+    it('deve mostrar progresso correto quando retomando avaliação', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ nome: 'Test User' }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ status: 'em_andamento', avaliacaoId: 1 }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ 
+            respostas: Array.from({ length: 15 }, (_, i) => ({ item: `Q${i + 1}`, valor: 50 })),
+            total: 15 
+          }) 
+        } as Response)
+
+      const AvaliacaoPage = (await import('@/app/avaliacao/page')).default
+      render(<AvaliacaoPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText('16 de 70')).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('Item 14: Próxima questão aparece automaticamente', () => {
+    it('deve avançar automaticamente após clicar na resposta', async () => {
+      const user = userEvent.setup()
+
+      mockFetch
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ nome: 'Test User' }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ status: 'iniciada', avaliacaoId: 1 }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ respostas: [], total: 0 }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ success: true }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ success: true }) 
+        } as Response)
+
+      const AvaliacaoPage = (await import('@/app/avaliacao/page')).default
+      render(<AvaliacaoPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Nunca')).toBeInTheDocument()
+      })
+
+      const textoInicial = document.body.textContent
+
+      // Clicar em uma opção
+      const primeiraOpcao = screen.getByText('Nunca')
+      await user.click(primeiraOpcao)
+
+      await waitFor(() => {
+        const textoDepois = document.body.textContent
+        // O texto deve ter mudado (nova questão)
+        expect(textoDepois).not.toBe(textoInicial)
+      })
+    })
+
+    it('não deve exigir botão "Próxima" para avançar', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ nome: 'Test User' }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ status: 'iniciada', avaliacaoId: 1 }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ respostas: [], total: 0 }) 
+        } as Response)
+
+      const AvaliacaoPage = (await import('@/app/avaliacao/page')).default
+      render(<AvaliacaoPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Nunca')).toBeInTheDocument()
+      })
+
+      // Não deve haver botão "Próxima" ou "Avançar"
+      expect(screen.queryByRole('button', { name: /próxima/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /avançar/i })).not.toBeInTheDocument()
+    })
+
+    it('deve salvar e avançar em uma única ação', async () => {
+      const user = userEvent.setup()
+
+      mockFetch
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ nome: 'Test User' }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ status: 'iniciada', avaliacaoId: 1 }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ respostas: [], total: 0 }) 
+        } as Response)
+        .mockResolvedValueOnce({ 
+          ok: true, 
+          json: async () => ({ success: true }) 
+        } as Response)
+
+      const AvaliacaoPage = (await import('@/app/avaliacao/page')).default
+      render(<AvaliacaoPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Nunca')).toBeInTheDocument()
+      })
+
+      // Um clique deve salvar E avançar
+      const primeiraOpcao = screen.getByText('Nunca')
+      await user.click(primeiraOpcao)
+
+      await waitFor(() => {
+        // Verificar que a API de salvar foi chamada
+        expect(mockFetch).toHaveBeenCalledWith(
+          expect.stringContaining('/api/avaliacao/respostas'),
+          expect.objectContaining({ method: 'POST' })
+        )
+      })
+    })
+  })
+})

@@ -21,7 +21,10 @@ describe('API /api/avaliacao/finalizar', () => {
       .mockImplementationOnce(async () => ({ rows: [{ id: 1 }], rowCount: 1 })) // Busca avaliação
       .mockImplementationOnce(async () => ({ rows: Array(10).fill({ grupo: 1, item: 'Q1', valor: 50 }), rowCount: 10 })); // Só 10 respostas
 
-    const req = { method: 'POST' } as any;
+    const req = {
+      method: 'POST',
+      json: async () => ({})
+    } as any;
     const res = await finalizarAvaliacao(req);
     const json = await res.json();
     expect(res.status).toBe(400);
@@ -38,7 +41,10 @@ describe('API /api/avaliacao/finalizar', () => {
       }))
       .mockImplementation(async () => ({ rows: [], rowCount: 0 })); // Para inserts/updates
 
-    const req = { method: 'POST' } as any;
+    const req = {
+      method: 'POST',
+      json: async () => ({})
+    } as any;
     const res = await finalizarAvaliacao(req);
     const json = await res.json();
     expect(res.status).toBe(200);

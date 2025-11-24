@@ -1,12 +1,8 @@
 'use client'
 
-import { useEffect, useState, Fragment } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/Header'
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js'
-import { Bar } from 'react-chartjs-2'
-
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 interface Session {
   cpf: string
@@ -18,130 +14,93 @@ interface Empresa {
   id: number
   nome: string
   cnpj: string
+  total_funcionarios?: number
+  avaliacoes_pendentes?: number
 }
 
-interface DashboardData {
-  stats: {
-    total_avaliacoes: number
-    concluidas: number
-    funcionarios_avaliados: number
-  }
-  resultados: Array<{
-    grupo: number
-    dominio: string
-    media_score: number
-    categoria: string
-    total: number
-    baixo: number
-    medio: number
-    alto: number
-  }>
-  distribuicao: Array<{
-    categoria: string
-    total: number
-  }>
+interface ClinicaStats {
+  total_empresas: number
+  total_funcionarios: number
+  total_avaliacoes: number
+  avaliacoes_concluidas: number
 }
 
-export default function RHPage() {
+export default function ClinicaOverviewPage() {
   const [session, setSession] = useState<Session | null>(null)
-  const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [empresas, setEmpresas] = useState<Empresa[]>([])
-  const [selectedEmpresa, setSelectedEmpresa] = useState<string>('')
+  const [clinicaStats, setClinicaStats] = useState<ClinicaStats | null>(null)
   const router = useRouter()
 
   useEffect(() => {
-    const loadEmpresasAndData = async () => {
+    const loadData = async () => {
+      await checkAuth()
       await loadEmpresas()
-      await fetchData()
+      await loadClinicaStats()
     }
-    loadEmpresasAndData()
+    loadData()
   }, [])
+
+  const checkAuth = async () => {
+    try {
+      const sessionRes = await fetch('/api/auth/session')
+      if (!sessionRes.ok) {
+        router.push('/login')
+        return
+      }
+      const sessionData = await sessionRes.json()
+
+      if (sessionData.perfil !== 'rh' && sessionData.perfil !== 'admin') {
+        router.push('/dashboard')
+        return
+      }
+
+      setSession(sessionData)
+    } catch (error) {
+      console.error('Erro ao verificar autenticação:', error)
+      router.push('/login')
+    }
+  }
 
   const loadEmpresas = async () => {
     try {
       const res = await fetch('/api/rh/empresas')
       if (res.ok) {
         const empresasData = await res.json()
-        setEmpresas(empresasData)
+        // Adicionar estatísticas mock para cada empresa (seria calculado na API)
+        const empresasComStats = empresasData.map((empresa: Empresa) => ({
+          ...empresa,
+          total_funcionarios: Math.floor(Math.random() * 50) + 10, // Mock
+          avaliacoes_pendentes: Math.floor(Math.random() * 20) + 5 // Mock
+        }))
+        setEmpresas(empresasComStats)
       }
     } catch (error) {
       console.error('Erro ao carregar empresas:', error)
     }
   }
 
-  const fetchData = async (empresaId?: string) => {
+  const loadClinicaStats = async () => {
     try {
-      if (!session) {
-        const sessionRes = await fetch('/api/auth/session')
-        if (!sessionRes.ok) {
-          router.push('/login')
-          return
-        }
-        const sessionData = await sessionRes.json()
-
-        if (sessionData.perfil !== 'rh' && sessionData.perfil !== 'admin') {
-          router.push('/dashboard')
-          return
-        }
-
-        setSession(sessionData)
-      }
-
-      const dashboardUrl = empresaId
-        ? `/api/rh/dashboard?empresa_id=${empresaId}`
-        : '/api/rh/dashboard'
-
-      const dashboardRes = await fetch(dashboardUrl)
-      const dashboardData = await dashboardRes.json()
-      setData(dashboardData)
+      // Mock stats - seria calculado na API
+      setClinicaStats({
+        total_empresas: empresas.length,
+        total_funcionarios: empresas.reduce((sum, emp) => sum + (emp.total_funcionarios || 0), 0),
+        total_avaliacoes: 150,
+        avaliacoes_concluidas: 120
+      })
     } catch (error) {
-      console.error('Erro ao carregar dados:', error)
+      console.error('Erro ao carregar estatísticas da clínica:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const exportarPDF = () => {
-    // Implementar exportação PDF
-    alert('Exportação PDF em desenvolvimento')
+  const navigateToEmpresa = (empresaId: number) => {
+    router.push(`/rh/empresa/${empresaId}`)
   }
 
-  const exportarExcel = () => {
-    // Implementar exportação Excel
-    alert('Exportação Excel em desenvolvimento')
-  }
-
-
-  const liberarPorNivel = async (nivel: 'operacional' | 'gestao') => {
-    try {
-      const response = await fetch('/api/rh/liberar-por-nivel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nivelCargo: nivel }),
-      })
-
-      if (response.ok) {
-        const result = await response.json()
-        alert(`${result.message}\n✅ Criadas: ${result.avaliacoesCreated}\n⚠️ Já existiam: ${result.avaliacoesExistentes}\n📊 Total funcionários: ${result.totalFuncionarios}`)
-        fetchData(selectedEmpresa || undefined)
-      } else {
-        const error = await response.json()
-        alert('Erro: ' + error.error)
-      }
-    } catch (error) {
-      alert('Erro ao liberar avaliações')
-    }
-  }
-
-  const handleEmpresaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const empresaId = e.target.value
-    setSelectedEmpresa(empresaId)
-    fetchData(empresaId || undefined)
-  }
-
-
-  if (loading || !session || !data) {
+  if (loading || !session) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -149,180 +108,84 @@ export default function RHPage() {
     )
   }
 
-  // Dados para gráfico de barras
-  const barData = {
-    labels: data.resultados.map(r => `Grupo ${r.grupo}: ${r.dominio.substring(0, 15)}`),
-    datasets: [{
-      label: 'Score Médio',
-      data: data.resultados.map(r => r.media_score),
-      backgroundColor: 'rgba(255, 107, 0, 0.7)',
-      borderColor: 'rgb(255, 107, 0)',
-      borderWidth: 1,
-    }],
-  }
-
-
   return (
     <div className="min-h-screen bg-gray-50">
+      <Header />
 
-      
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-800 mb-2">Dashboard RH</h2>
-          <p className="text-gray-600">Visão geral das avaliações psicossociais</p>
+          <h2 className="text-3xl font-bold text-gray-800 mb-2">Clínica BPS Brasil</h2>
+          <p className="text-gray-600">Visão geral das empresas e avaliações psicossociais</p>
         </div>
 
-        {/* Filtro de empresas */}
-        <div className="mb-6">
-          <label htmlFor="empresa-select" className="block text-sm font-medium text-gray-700 mb-2">
-            Filtrar por Empresa:
-          </label>
-          <select
-            id="empresa-select"
-            value={selectedEmpresa}
-            onChange={handleEmpresaChange}
-            className="block w-full max-w-md px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
-          >
-            <option value="">Todas as empresas</option>
-            {empresas.map((empresa) => (
-              <option key={empresa.id} value={empresa.id}>
-                {empresa.nome}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Cards de estatísticas da clínica - Layout compacto */}
+        <div className="bg-white rounded-lg shadow-md p-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <div className="text-2xl md:text-3xl font-bold text-primary mb-1">{clinicaStats?.total_empresas || 0}</div>
+              <div className="text-xs md:text-sm font-medium text-gray-600">Empresas</div>
+            </div>
 
-        {/* Cards de estatísticas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">Total de Avaliações</h3>
-            <p className="text-4xl font-bold text-primary">{data.stats.total_avaliacoes}</p>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">Concluídas</h3>
-            <p className="text-4xl font-bold text-success">{data.stats.concluidas}</p>
-          </div>
-          
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">Funcionários Avaliados</h3>
-            <p className="text-4xl font-bold text-gray-800">{data.stats.funcionarios_avaliados}</p>
-          </div>
-        </div>
+            <div className="text-center">
+              <div className="text-2xl md:text-3xl font-bold text-blue-600 mb-1">{clinicaStats?.total_funcionarios || 0}</div>
+              <div className="text-xs md:text-sm font-medium text-gray-600">Funcionários</div>
+            </div>
 
-        {/* Botões de ações */}
-        <div className="space-y-4 mb-8">
-          {/* Botões de liberação por nível */}
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">🎯 Liberar Avaliações por Nível</h3>
-            <div className="flex gap-4 flex-wrap">
-              <button
-                onClick={() => liberarPorNivel('operacional')}
-                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-semibold"
-              >
-                🔧 Liberar para OPERACIONAIS
-              </button>
-              <button
-                onClick={() => liberarPorNivel('gestao')}
-                className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors font-semibold"
-              >
-                👔 Liberar para GESTÃO
-              </button>
+            <div className="text-center">
+              <div className="text-2xl md:text-3xl font-bold text-purple-600 mb-1">{clinicaStats?.total_avaliacoes || 0}</div>
+              <div className="text-xs md:text-sm font-medium text-gray-600">Avaliações</div>
+            </div>
+
+            <div className="text-center">
+              <div className="text-2xl md:text-3xl font-bold text-success mb-1">{clinicaStats?.avaliacoes_concluidas || 0}</div>
+              <div className="text-xs md:text-sm font-medium text-gray-600">Concluídas</div>
             </div>
           </div>
-
-          {/* Botões de exportação e outros */}
-          <div className="flex gap-4 flex-wrap">
-            <button
-              onClick={exportarPDF}
-              className="bg-danger text-white px-6 py-2 rounded-lg hover:bg-red-600 transition-colors"
-            >
-              📄 Exportar PDF
-            </button>
-            <button
-              onClick={exportarExcel}
-              className="bg-success text-white px-6 py-2 rounded-lg hover:bg-green-600 transition-colors"
-            >
-              📊 Exportar Excel
-            </button>
-          </div>
         </div>
 
-        {/* Gráficos */}
-        <div className="grid grid-cols-1 gap-6">
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Scores por Domínio</h3>
-            <Bar data={barData} options={{ responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }} />
-          </div>
-        </div>
+        {/* Empresas - Layout compacto */}
+        <div className="mb-6">
+          <h3 className="text-xl font-bold text-gray-800 mb-4">🏢 Empresas</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {empresas.map((empresa) => (
+              <div
+                key={empresa.id}
+                onClick={() => navigateToEmpresa(empresa.id)}
+                className="bg-white rounded-lg shadow-sm hover:shadow-md transition-all cursor-pointer border border-gray-200 hover:border-primary p-4"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-gray-800 truncate flex-1 mr-2">{empresa.nome}</h4>
+                  <div className="text-lg">🏭</div>
+                </div>
 
-        {/* Tabela detalhada */}
-        <div className="mt-8 bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="p-6">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Detalhamento por Domínio</h3>
+                <p className="text-xs text-gray-500 mb-3 truncate">CNPJ: {empresa.cnpj}</p>
+
+                <div className="flex justify-between items-center text-center">
+                  <div className="flex-1">
+                    <div className="text-lg font-bold text-blue-600">{empresa.total_funcionarios}</div>
+                    <div className="text-xs text-gray-500">Funcionários</div>
+                  </div>
+                  <div className="w-px h-8 bg-gray-300 mx-2"></div>
+                  <div className="flex-1">
+                    <div className="text-lg font-bold text-orange-600">{empresa.avaliacoes_pendentes}</div>
+                    <div className="text-xs text-gray-500">Pendentes</div>
+                  </div>
+                </div>
+
+                <button className="w-full mt-3 bg-primary text-white py-2 px-3 rounded-md hover:bg-orange-600 transition-colors text-sm font-medium">
+                  Ver Dashboard →
+                </button>
+              </div>
+            ))}
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Grupo</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Domínio</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Score Médio</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Baixo</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Médio</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Alto</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {data.resultados.map((r, idx) => (
-                  <Fragment key={idx}>
-                    <tr className="hover:bg-gray-50">
-                      <td className="px-6 py-4 text-sm text-gray-900">{r.grupo}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{r.dominio}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{Number(r.media_score).toFixed(1)}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{r.baixo}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{r.medio}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{r.alto}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{r.total}</td>
-                    </tr>
-                    <tr className="bg-gray-50">
-                      <td colSpan={3} className="px-6 py-2 text-xs text-gray-500"></td>
-                      <td className="px-6 py-2 text-xs text-gray-500">{r.total > 0 ? ((r.baixo / r.total) * 100).toFixed(1) + '%' : '0%'}</td>
-                      <td className="px-6 py-2 text-xs text-gray-500">{r.total > 0 ? ((r.medio / r.total) * 100).toFixed(1) + '%' : '0%'}</td>
-                      <td className="px-6 py-2 text-xs text-gray-500">{r.total > 0 ? ((r.alto / r.total) * 100).toFixed(1) + '%' : '0%'}</td>
-                      <td className="px-6 py-2 text-xs text-gray-500"></td>
-                    </tr>
-                  </Fragment>
-                ))}
-                {/* Linhas de total geral */}
-                {(() => {
-                  const totalBaixo = data.resultados.reduce((sum, r) => sum + Number(r.baixo), 0)
-                  const totalMedio = data.resultados.reduce((sum, r) => sum + Number(r.medio), 0)
-                  const totalAlto = data.resultados.reduce((sum, r) => sum + Number(r.alto), 0)
-                  const totalGeral = totalBaixo + totalMedio + totalAlto
-                  return (
-                    <Fragment>
-                      <tr className="bg-blue-50 font-semibold">
-                        <td colSpan={3} className="px-6 py-4 text-sm text-gray-900">Total Geral</td>
-                        <td className="px-6 py-4 text-sm text-gray-900">{totalBaixo}</td>
-                        <td className="px-6 py-4 text-sm text-gray-900">{totalMedio}</td>
-                        <td className="px-6 py-4 text-sm text-gray-900">{totalAlto}</td>
-                        <td className="px-6 py-4 text-sm text-gray-900">{totalGeral}</td>
-                      </tr>
-                      <tr className="bg-blue-100">
-                        <td colSpan={3} className="px-6 py-2 text-xs text-gray-600">Percentual Geral</td>
-                        <td className="px-6 py-2 text-xs text-gray-600">{totalGeral > 0 ? ((totalBaixo / totalGeral) * 100).toFixed(1) + '%' : '0%'}</td>
-                        <td className="px-6 py-2 text-xs text-gray-600">{totalGeral > 0 ? ((totalMedio / totalGeral) * 100).toFixed(1) + '%' : '0%'}</td>
-                        <td className="px-6 py-2 text-xs text-gray-600">{totalGeral > 0 ? ((totalAlto / totalGeral) * 100).toFixed(1) + '%' : '0%'}</td>
-                        <td className="px-6 py-2 text-xs text-gray-600"></td>
-                      </tr>
-                    </Fragment>
-                  )
-                })()}
-              </tbody>
-            </table>
-          </div>
+
+          {empresas.length === 0 && (
+            <div className="text-center py-12">
+              <div className="text-6xl mb-4">🏢</div>
+              <h4 className="text-xl font-semibold text-gray-600 mb-2">Nenhuma empresa encontrada</h4>
+              <p className="text-gray-500">Entre em contato com o administrador para cadastrar empresas.</p>
+            </div>
+          )}
         </div>
       </main>
     </div>

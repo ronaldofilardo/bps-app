@@ -78,8 +78,8 @@ jest.mock('@/lib/questoes', () => {
     itens: [
       {
         id: 'Q1',
-        texto: 'Com que frequência você tem muito serviço acumulado?',
-        textoGestao: 'Com que frequência você tem muito serviço acumulado?'
+        texto: 'Com que frequência você tem muito serviço pra fazer?',
+        textoGestao: 'Com que frequência você tem um volume elevado de trabalho?'
       }
     ]
   };
