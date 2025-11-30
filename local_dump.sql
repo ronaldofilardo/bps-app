@@ -1,0 +1,2447 @@
+--
+-- PostgreSQL database dump
+--
+
+-- Dumped from database version 17.5
+-- Dumped by pg_dump version 17.5
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- Name: nivel_cargo_enum; Type: TYPE; Schema: public; Owner: postgres
+--
+
+CREATE TYPE public.nivel_cargo_enum AS ENUM (
+    'operacional',
+    'gestao'
+);
+
+
+ALTER TYPE public.nivel_cargo_enum OWNER TO postgres;
+
+--
+-- Name: detectar_anomalia_score(numeric, character varying, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.detectar_anomalia_score(p_score numeric, p_tipo character varying, p_grupo integer) RETURNS TABLE(is_anomalous boolean, reason text, adjusted_score numeric)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    -- Scores fora do range válido (0-100)
+    IF p_score < 0 OR p_score > 100 THEN
+        RETURN QUERY SELECT true, 'Score fora do intervalo válido', GREATEST(0, LEAST(100, p_score));
+        RETURN;
+    END IF;
+    
+    -- Scores negativos em escalas positivas
+    IF p_score < 0 AND p_tipo = 'positiva' THEN
+        RETURN QUERY SELECT true, 'Score negativo em escala positiva', 0::DECIMAL;
+        RETURN;
+    END IF;
+    
+    -- Padrões suspeitos (todas respostas iguais)
+    IF p_score IN (0, 25, 50, 75, 100) THEN
+        RETURN QUERY SELECT true, 'Possível padrão de resposta uniforme', p_score;
+        RETURN;
+    END IF;
+    
+    -- Grupos específicos
+    IF p_grupo = 8 AND p_score > 0 THEN
+        RETURN QUERY SELECT true, 'Comportamentos ofensivos detectados', GREATEST(p_score, 25);
+        RETURN;
+    END IF;
+    
+    -- Score normal
+    RETURN QUERY SELECT false, 'Score normal'::TEXT, p_score;
+END;
+$$;
+
+
+ALTER FUNCTION public.detectar_anomalia_score(p_score numeric, p_tipo character varying, p_grupo integer) OWNER TO postgres;
+
+--
+-- Name: gerar_codigo_lote(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.gerar_codigo_lote() RETURNS character varying
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    data_atual VARCHAR(6);
+    sequencial INT;
+    codigo VARCHAR(20);
+BEGIN
+    -- Formato: 001-DDMMYY (ex: 001-291125)
+    data_atual := TO_CHAR(CURRENT_DATE, 'DDMMYY');
+
+    -- Buscar prÃ³ximo sequencial para a data
+    SELECT COALESCE(MAX(CAST(SPLIT_PART(la.codigo, '-', 1) AS INTEGER)), 0) + 1
+    INTO sequencial
+    FROM lotes_avaliacao la
+    WHERE la.codigo LIKE '%-' || data_atual;
+
+    -- Formatar cÃ³digo com zeros Ã  esquerda
+    codigo := LPAD(sequencial::TEXT, 3, '0') || '-' || data_atual;
+
+    RETURN codigo;
+END;
+$$;
+
+
+ALTER FUNCTION public.gerar_codigo_lote() OWNER TO postgres;
+
+--
+-- Name: gerar_dados_relatorio(integer, integer, integer, date, date); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.gerar_dados_relatorio(p_clinica_id integer, p_template_id integer DEFAULT 1, p_empresa_id integer DEFAULT NULL::integer, p_data_inicio date DEFAULT NULL::date, p_data_fim date DEFAULT NULL::date) RETURNS TABLE(secao character varying, tipo_dados character varying, dados jsonb, metadados jsonb)
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    template_config RECORD;
+BEGIN
+    -- Buscar configuração do template
+    SELECT * INTO template_config FROM relatorio_templates WHERE id = p_template_id;
+    
+    -- Seção: Resumo Executivo
+    RETURN QUERY
+    SELECT 
+        'resumo_executivo'::VARCHAR as secao,
+        'estatisticas_gerais'::VARCHAR as tipo_dados,
+        jsonb_build_object(
+            'total_funcionarios', COUNT(DISTINCT f.cpf),
+            'total_avaliacoes', COUNT(a.id),
+            'avaliacoes_concluidas', COUNT(CASE WHEN a.status = 'concluida' THEN 1 END),
+            'taxa_conclusao', ROUND((COUNT(CASE WHEN a.status = 'concluida' THEN 1 END) * 100.0 / NULLIF(COUNT(a.id), 0)), 2),
+            'funcionarios_operacionais', COUNT(DISTINCT CASE WHEN f.nivel_cargo = 'operacional' THEN f.cpf END),
+            'funcionarios_gestao', COUNT(DISTINCT CASE WHEN f.nivel_cargo = 'gestao' THEN f.cpf END)
+        ) as dados,
+        jsonb_build_object(
+            'periodo', COALESCE(p_data_inicio::TEXT, '2024-01-01') || ' a ' || COALESCE(p_data_fim::TEXT, CURRENT_DATE::TEXT),
+            'clinica_id', p_clinica_id,
+            'empresa_filtro', CASE WHEN p_empresa_id IS NOT NULL THEN 'específica' ELSE 'todas' END
+        ) as metadados
+    FROM funcionarios f
+    LEFT JOIN avaliacoes a ON f.cpf = a.funcionario_cpf
+    LEFT JOIN empresas_clientes ec ON f.empresa_id = ec.id
+    WHERE f.clinica_id = p_clinica_id 
+        AND (p_empresa_id IS NULL OR ec.id = p_empresa_id)
+        AND (p_data_inicio IS NULL OR a.created_at >= p_data_inicio)
+        AND (p_data_fim IS NULL OR a.created_at <= p_data_fim);
+    
+    -- Seção: Análise por Domínios
+    RETURN QUERY
+    SELECT 
+        'analise_dominios'::VARCHAR as secao,
+        'scores_por_grupo'::VARCHAR as tipo_dados,
+        jsonb_agg(
+            jsonb_build_object(
+                'grupo', grupo_num,
+                'dominio', dominio_nome,
+                'score_medio', score_medio,
+                'categoria', categoria,
+                'total_respostas', total_respostas
+            )
+        ) as dados,
+        jsonb_build_object(
+            'metodologia', 'COPSOQ-III',
+            'escala', '0-100',
+            'interpretacao', 'alto=75+, medio=50-74, baixo=0-49'
+        ) as metadados
+    FROM (
+        SELECT 
+            r.grupo as grupo_num,
+            CASE r.grupo
+                WHEN 1 THEN 'Demandas no Trabalho'
+                WHEN 2 THEN 'Organização e Conteúdo'
+                WHEN 3 THEN 'Relações Sociais'
+                WHEN 4 THEN 'Liderança'
+                WHEN 5 THEN 'Valores Organizacionais'
+                WHEN 6 THEN 'Saúde e Bem-estar'
+                WHEN 7 THEN 'Comportamentos Ofensivos'
+                WHEN 8 THEN 'Jogos de Azar'
+                WHEN 9 THEN 'Endividamento'
+                ELSE 'Outros'
+            END as dominio_nome,
+            ROUND(AVG(r.valor), 2) as score_medio,
+            CASE 
+                WHEN AVG(r.valor) >= 75 THEN 'Alto'
+                WHEN AVG(r.valor) >= 50 THEN 'Médio'
+                ELSE 'Baixo'
+            END as categoria,
+            COUNT(r.valor) as total_respostas
+        FROM respostas r
+        JOIN avaliacoes a ON r.avaliacao_id = a.id
+        JOIN funcionarios f ON a.funcionario_cpf = f.cpf
+        LEFT JOIN empresas_clientes ec ON f.empresa_id = ec.id
+        WHERE f.clinica_id = p_clinica_id 
+            AND (p_empresa_id IS NULL OR ec.id = p_empresa_id)
+            AND a.status = 'concluida'
+        GROUP BY r.grupo
+        ORDER BY r.grupo
+    ) dados_grupos;
+    
+    -- Seção: Alertas e Recomendações
+    RETURN QUERY
+    SELECT 
+        'alertas_recomendacoes'::VARCHAR as secao,
+        'analise_critica'::VARCHAR as tipo_dados,
+        jsonb_build_object(
+            'alertas_criticos', ARRAY[
+                'Comportamentos ofensivos detectados em ' || COUNT(CASE WHEN r.grupo = 8 AND r.valor > 0 THEN 1 END) || ' respostas',
+                'Alto risco de jogos de azar em ' || COUNT(CASE WHEN r.grupo = 9 AND r.valor > 50 THEN 1 END) || ' casos',
+                'Problemas de endividamento em ' || COUNT(CASE WHEN r.grupo = 10 AND r.valor > 75 THEN 1 END) || ' funcionários'
+            ],
+            'recomendacoes_prioritarias', ARRAY[
+                'Implementar programa de prevenção ao assédio e violência',
+                'Oferecer orientação financeira e sobre jogos responsáveis',
+                'Revisar carga de trabalho e organização das demandas',
+                'Fortalecer canais de comunicação e feedback'
+            ]
+        ) as dados,
+        jsonb_build_object(
+            'base_analise', 'Respostas com pontuação de risco',
+            'criterios', 'Grupos 8,9,10 com scores > limites críticos',
+            'urgencia', 'Alta para comportamentos ofensivos'
+        ) as metadados
+    FROM respostas r
+    JOIN avaliacoes a ON r.avaliacao_id = a.id
+    JOIN funcionarios f ON a.funcionario_cpf = f.cpf
+    LEFT JOIN empresas_clientes ec ON f.empresa_id = ec.id
+    WHERE f.clinica_id = p_clinica_id 
+        AND (p_empresa_id IS NULL OR ec.id = p_empresa_id)
+        AND a.status = 'concluida'
+        AND r.grupo IN (8, 9, 10);
+        
+END;
+$$;
+
+
+ALTER FUNCTION public.gerar_dados_relatorio(p_clinica_id integer, p_template_id integer, p_empresa_id integer, p_data_inicio date, p_data_fim date) OWNER TO postgres;
+
+--
+-- Name: get_resultados_por_empresa(integer, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.get_resultados_por_empresa(p_clinica_id integer, p_empresa_id integer DEFAULT NULL::integer) RETURNS TABLE(empresa_id integer, empresa_nome character varying, grupo integer, dominio character varying, media_score numeric, categoria character varying, total_respostas bigint)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        ec.id as empresa_id,
+        ec.nome as empresa_nome,
+        r.grupo,
+        CASE r.grupo
+            WHEN 1 THEN 'Demandas no Trabalho'
+            WHEN 2 THEN 'Organização e Conteúdo'
+            WHEN 3 THEN 'Relações Sociais'
+            WHEN 4 THEN 'Liderança'
+            WHEN 5 THEN 'Valores Organizacionais'
+            WHEN 6 THEN 'Saúde e Bem-estar'
+            WHEN 7 THEN 'Comportamentos Ofensivos'
+            WHEN 8 THEN 'Jogos de Azar'
+            WHEN 9 THEN 'Endividamento'
+            ELSE 'Outros'
+        END as dominio,
+        AVG(r.valor) as media_score,
+        CASE 
+            WHEN AVG(r.valor) >= 75 THEN 'alto'
+            WHEN AVG(r.valor) >= 50 THEN 'medio'
+            ELSE 'baixo'
+        END as categoria,
+        COUNT(r.valor) as total_respostas
+    FROM respostas r
+    JOIN avaliacoes a ON r.avaliacao_id = a.id
+    JOIN funcionarios f ON a.funcionario_cpf = f.cpf
+    JOIN empresas_clientes ec ON f.empresa_id = ec.id
+    WHERE f.clinica_id = p_clinica_id
+        AND (p_empresa_id IS NULL OR ec.id = p_empresa_id)
+        AND a.status = 'concluida'
+    GROUP BY ec.id, ec.nome, r.grupo
+    ORDER BY ec.nome, r.grupo;
+END;
+$$;
+
+
+ALTER FUNCTION public.get_resultados_por_empresa(p_clinica_id integer, p_empresa_id integer) OWNER TO postgres;
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: analise_estatistica; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.analise_estatistica (
+    id integer NOT NULL,
+    avaliacao_id integer,
+    grupo integer,
+    score_original numeric(5,2),
+    score_ajustado numeric(5,2),
+    anomalia_detectada boolean DEFAULT false,
+    tipo_anomalia character varying(100),
+    recomendacao text,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+ALTER TABLE public.analise_estatistica OWNER TO postgres;
+
+--
+-- Name: analise_estatistica_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.analise_estatistica_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.analise_estatistica_id_seq OWNER TO postgres;
+
+--
+-- Name: analise_estatistica_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.analise_estatistica_id_seq OWNED BY public.analise_estatistica.id;
+
+
+--
+-- Name: avaliacoes; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.avaliacoes (
+    id integer NOT NULL,
+    funcionario_cpf character(11) NOT NULL,
+    inicio timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    envio timestamp without time zone,
+    status character varying(20) DEFAULT 'iniciada'::character varying,
+    grupo_atual integer DEFAULT 1,
+    criado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    lote_id integer,
+    CONSTRAINT avaliacoes_status_check CHECK (((status)::text = ANY ((ARRAY['iniciada'::character varying, 'em_andamento'::character varying, 'concluida'::character varying, 'inativada'::character varying])::text[])))
+);
+
+
+ALTER TABLE public.avaliacoes OWNER TO postgres;
+
+--
+-- Name: avaliacoes_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.avaliacoes_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.avaliacoes_id_seq OWNER TO postgres;
+
+--
+-- Name: avaliacoes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.avaliacoes_id_seq OWNED BY public.avaliacoes.id;
+
+
+--
+-- Name: clinicas; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.clinicas (
+    id integer NOT NULL,
+    nome character varying(100) NOT NULL,
+    cnpj character(14),
+    email character varying(100),
+    telefone character varying(20),
+    endereco text,
+    ativa boolean DEFAULT true,
+    criado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+ALTER TABLE public.clinicas OWNER TO postgres;
+
+--
+-- Name: clinicas_empresas; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.clinicas_empresas (
+    clinica_id integer NOT NULL,
+    empresa_id integer NOT NULL,
+    criado_em timestamp without time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.clinicas_empresas OWNER TO postgres;
+
+--
+-- Name: TABLE clinicas_empresas; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON TABLE public.clinicas_empresas IS 'Relacionamento entre clÃ­nicas de medicina ocupacional e empresas clientes que elas atendem';
+
+
+--
+-- Name: COLUMN clinicas_empresas.clinica_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.clinicas_empresas.clinica_id IS 'ID do funcionÃ¡rio RH que representa a clÃ­nica';
+
+
+--
+-- Name: COLUMN clinicas_empresas.empresa_id; Type: COMMENT; Schema: public; Owner: postgres
+--
+
+COMMENT ON COLUMN public.clinicas_empresas.empresa_id IS 'ID da empresa cliente atendida pela clÃ­nica';
+
+
+--
+-- Name: clinicas_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.clinicas_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.clinicas_id_seq OWNER TO postgres;
+
+--
+-- Name: clinicas_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.clinicas_id_seq OWNED BY public.clinicas.id;
+
+
+--
+-- Name: empresas_clientes; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.empresas_clientes (
+    id integer NOT NULL,
+    nome character varying(100) NOT NULL,
+    cnpj character varying(18) NOT NULL,
+    email character varying(100),
+    telefone character varying(20),
+    endereco text,
+    cidade character varying(50),
+    estado character varying(2),
+    cep character varying(10),
+    ativa boolean DEFAULT true,
+    clinica_id integer NOT NULL,
+    criado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+ALTER TABLE public.empresas_clientes OWNER TO postgres;
+
+--
+-- Name: empresas_clientes_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.empresas_clientes_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.empresas_clientes_id_seq OWNER TO postgres;
+
+--
+-- Name: empresas_clientes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.empresas_clientes_id_seq OWNED BY public.empresas_clientes.id;
+
+
+--
+-- Name: funcionarios; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.funcionarios (
+    id integer NOT NULL,
+    cpf character(11) NOT NULL,
+    nome character varying(100) NOT NULL,
+    setor character varying(50),
+    funcao character varying(50),
+    email character varying(100),
+    senha_hash text NOT NULL,
+    perfil character varying(20) DEFAULT 'funcionario'::character varying,
+    ativo boolean DEFAULT true,
+    criado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    clinica_id integer,
+    empresa_id integer,
+    matricula character varying(20),
+    nivel_cargo public.nivel_cargo_enum,
+    turno character varying(50),
+    escala character varying(50),
+    CONSTRAINT funcionarios_clinica_check CHECK (((((perfil)::text = 'master'::text) AND (clinica_id IS NULL)) OR (((perfil)::text <> 'master'::text) AND (clinica_id IS NOT NULL)))),
+    CONSTRAINT funcionarios_nivel_cargo_check CHECK ((((perfil)::text = ANY ((ARRAY['admin'::character varying, 'rh'::character varying, 'master'::character varying, 'emissor'::character varying])::text[])) OR (((perfil)::text = 'funcionario'::text) AND (nivel_cargo IS NOT NULL)))),
+    CONSTRAINT funcionarios_perfil_check CHECK (((perfil)::text = ANY ((ARRAY['funcionario'::character varying, 'rh'::character varying, 'admin'::character varying, 'master'::character varying, 'emissor'::character varying])::text[])))
+);
+
+
+ALTER TABLE public.funcionarios OWNER TO postgres;
+
+--
+-- Name: funcionarios_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.funcionarios_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.funcionarios_id_seq OWNER TO postgres;
+
+--
+-- Name: funcionarios_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.funcionarios_id_seq OWNED BY public.funcionarios.id;
+
+
+--
+-- Name: laudos; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.laudos (
+    id integer NOT NULL,
+    lote_id integer NOT NULL,
+    emissor_cpf character(11) NOT NULL,
+    observacoes text,
+    status character varying(20) DEFAULT 'rascunho'::character varying,
+    criado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    emitido_em timestamp without time zone,
+    enviado_em timestamp without time zone,
+    atualizado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT laudos_status_check CHECK (((status)::text = ANY ((ARRAY['rascunho'::character varying, 'emitido'::character varying, 'enviado'::character varying])::text[])))
+);
+
+
+ALTER TABLE public.laudos OWNER TO postgres;
+
+--
+-- Name: laudos_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.laudos_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.laudos_id_seq OWNER TO postgres;
+
+--
+-- Name: laudos_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.laudos_id_seq OWNED BY public.laudos.id;
+
+
+--
+-- Name: lotes_avaliacao; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.lotes_avaliacao (
+    id integer NOT NULL,
+    codigo character varying(20) NOT NULL,
+    clinica_id integer NOT NULL,
+    empresa_id integer NOT NULL,
+    titulo character varying(100) NOT NULL,
+    descricao text,
+    tipo character varying(20) DEFAULT 'completo'::character varying,
+    status character varying(20) DEFAULT 'ativo'::character varying,
+    liberado_por character(11) NOT NULL,
+    liberado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    criado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT lotes_avaliacao_status_check CHECK (((status)::text = ANY ((ARRAY['ativo'::character varying, 'cancelado'::character varying, 'finalizado'::character varying, 'concluido'::character varying])::text[]))),
+    CONSTRAINT lotes_avaliacao_tipo_check CHECK (((tipo)::text = ANY ((ARRAY['completo'::character varying, 'operacional'::character varying, 'gestao'::character varying])::text[])))
+);
+
+
+ALTER TABLE public.lotes_avaliacao OWNER TO postgres;
+
+--
+-- Name: lotes_avaliacao_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.lotes_avaliacao_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.lotes_avaliacao_id_seq OWNER TO postgres;
+
+--
+-- Name: lotes_avaliacao_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.lotes_avaliacao_id_seq OWNED BY public.lotes_avaliacao.id;
+
+
+--
+-- Name: questao_condicoes; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.questao_condicoes (
+    id integer NOT NULL,
+    questao_id integer NOT NULL,
+    questao_dependente integer,
+    operador character varying(10),
+    valor_condicao integer,
+    categoria character varying(20) DEFAULT 'core'::character varying,
+    ativo boolean DEFAULT true,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
+);
+
+
+ALTER TABLE public.questao_condicoes OWNER TO postgres;
+
+--
+-- Name: questao_condicoes_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.questao_condicoes_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.questao_condicoes_id_seq OWNER TO postgres;
+
+--
+-- Name: questao_condicoes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.questao_condicoes_id_seq OWNED BY public.questao_condicoes.id;
+
+
+--
+-- Name: relatorio_templates; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.relatorio_templates (
+    id integer NOT NULL,
+    nome character varying(100) NOT NULL,
+    tipo character varying(20) NOT NULL,
+    descricao text,
+    campos_incluidos jsonb,
+    filtros_padrao jsonb,
+    formato_saida character varying(20) DEFAULT 'A4'::character varying,
+    ativo boolean DEFAULT true,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT relatorio_templates_tipo_check CHECK (((tipo)::text = ANY ((ARRAY['pdf'::character varying, 'excel'::character varying, 'ambos'::character varying])::text[])))
+);
+
+
+ALTER TABLE public.relatorio_templates OWNER TO postgres;
+
+--
+-- Name: relatorio_templates_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.relatorio_templates_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.relatorio_templates_id_seq OWNER TO postgres;
+
+--
+-- Name: relatorio_templates_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.relatorio_templates_id_seq OWNED BY public.relatorio_templates.id;
+
+
+--
+-- Name: respostas; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.respostas (
+    id integer NOT NULL,
+    avaliacao_id integer NOT NULL,
+    grupo integer NOT NULL,
+    item character varying(10) NOT NULL,
+    valor integer NOT NULL,
+    criado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT respostas_valor_check CHECK ((valor = ANY (ARRAY[0, 25, 50, 75, 100])))
+);
+
+
+ALTER TABLE public.respostas OWNER TO postgres;
+
+--
+-- Name: respostas_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.respostas_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.respostas_id_seq OWNER TO postgres;
+
+--
+-- Name: respostas_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.respostas_id_seq OWNED BY public.respostas.id;
+
+
+--
+-- Name: resultados; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.resultados (
+    id integer NOT NULL,
+    avaliacao_id integer NOT NULL,
+    grupo integer NOT NULL,
+    dominio character varying(100) NOT NULL,
+    score numeric(5,2) NOT NULL,
+    categoria character varying(20),
+    criado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT resultados_categoria_check CHECK (((categoria)::text = ANY ((ARRAY['baixo'::character varying, 'medio'::character varying, 'alto'::character varying])::text[])))
+);
+
+
+ALTER TABLE public.resultados OWNER TO postgres;
+
+--
+-- Name: resultados_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.resultados_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.resultados_id_seq OWNER TO postgres;
+
+--
+-- Name: resultados_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.resultados_id_seq OWNED BY public.resultados.id;
+
+
+--
+-- Name: vw_analise_grupos_negativos; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.vw_analise_grupos_negativos AS
+ SELECT grupo,
+    count(*) AS total_avaliacoes,
+    avg(score_original) AS media_original,
+    avg(score_ajustado) AS media_ajustada,
+    stddev(score_original) AS desvio_padrao,
+    count(
+        CASE
+            WHEN anomalia_detectada THEN 1
+            ELSE NULL::integer
+        END) AS anomalias_detectadas,
+    count(
+        CASE
+            WHEN (score_original < (0)::numeric) THEN 1
+            ELSE NULL::integer
+        END) AS scores_negativos,
+    count(
+        CASE
+            WHEN (score_original > (100)::numeric) THEN 1
+            ELSE NULL::integer
+        END) AS scores_acima_limite,
+    string_agg(DISTINCT (tipo_anomalia)::text, ', '::text) AS tipos_anomalias
+   FROM public.analise_estatistica
+  GROUP BY grupo
+  ORDER BY grupo;
+
+
+ALTER VIEW public.vw_analise_grupos_negativos OWNER TO postgres;
+
+--
+-- Name: vw_comparativo_empresas; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.vw_comparativo_empresas AS
+ SELECT ec.clinica_id,
+    ec.id AS empresa_id,
+    ec.nome AS empresa_nome,
+    avg(
+        CASE
+            WHEN (r.grupo = 1) THEN r.valor
+            ELSE NULL::integer
+        END) AS demandas_trabalho,
+    avg(
+        CASE
+            WHEN (r.grupo = 2) THEN r.valor
+            ELSE NULL::integer
+        END) AS organizacao_conteudo,
+    avg(
+        CASE
+            WHEN (r.grupo = 3) THEN r.valor
+            ELSE NULL::integer
+        END) AS relacoes_sociais,
+    avg(
+        CASE
+            WHEN (r.grupo = 4) THEN r.valor
+            ELSE NULL::integer
+        END) AS lideranca,
+    avg(
+        CASE
+            WHEN (r.grupo = 5) THEN r.valor
+            ELSE NULL::integer
+        END) AS valores_organizacionais,
+    avg(
+        CASE
+            WHEN (r.grupo = 6) THEN r.valor
+            ELSE NULL::integer
+        END) AS saude_bem_estar,
+    avg(r.valor) AS score_geral,
+    count(DISTINCT f.cpf) AS funcionarios_responderam,
+    count(r.valor) AS total_respostas
+   FROM (((public.empresas_clientes ec
+     JOIN public.funcionarios f ON ((ec.id = f.empresa_id)))
+     JOIN public.avaliacoes a ON ((f.cpf = a.funcionario_cpf)))
+     JOIN public.respostas r ON ((a.id = r.avaliacao_id)))
+  WHERE (((a.status)::text = 'concluida'::text) AND (r.grupo <= 6))
+  GROUP BY ec.clinica_id, ec.id, ec.nome
+  ORDER BY ec.clinica_id, ec.nome;
+
+
+ALTER VIEW public.vw_comparativo_empresas OWNER TO postgres;
+
+--
+-- Name: vw_dashboard_por_empresa; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.vw_dashboard_por_empresa AS
+ SELECT f.clinica_id,
+    ec.id AS empresa_id,
+    ec.nome AS empresa_nome,
+    count(DISTINCT f.cpf) AS total_funcionarios,
+    count(DISTINCT
+        CASE
+            WHEN (f.nivel_cargo = 'operacional'::public.nivel_cargo_enum) THEN f.cpf
+            ELSE NULL::bpchar
+        END) AS funcionarios_operacionais,
+    count(DISTINCT
+        CASE
+            WHEN (f.nivel_cargo = 'gestao'::public.nivel_cargo_enum) THEN f.cpf
+            ELSE NULL::bpchar
+        END) AS funcionarios_gestao,
+    count(a.id) AS total_avaliacoes,
+    count(
+        CASE
+            WHEN ((a.status)::text = 'concluida'::text) THEN a.id
+            ELSE NULL::integer
+        END) AS avaliacoes_concluidas,
+    count(
+        CASE
+            WHEN ((a.status)::text = 'em_andamento'::text) THEN a.id
+            ELSE NULL::integer
+        END) AS avaliacoes_andamento,
+    count(
+        CASE
+            WHEN ((a.status)::text = 'iniciada'::text) THEN a.id
+            ELSE NULL::integer
+        END) AS avaliacoes_iniciadas,
+    round((((count(
+        CASE
+            WHEN ((a.status)::text = 'concluida'::text) THEN a.id
+            ELSE NULL::integer
+        END))::numeric * 100.0) / (NULLIF(count(a.id), 0))::numeric), 2) AS percentual_conclusao
+   FROM ((public.funcionarios f
+     LEFT JOIN public.empresas_clientes ec ON ((f.empresa_id = ec.id)))
+     LEFT JOIN public.avaliacoes a ON ((f.cpf = a.funcionario_cpf)))
+  WHERE ((f.perfil)::text = 'funcionario'::text)
+  GROUP BY f.clinica_id, ec.id, ec.nome
+  ORDER BY f.clinica_id, ec.nome;
+
+
+ALTER VIEW public.vw_dashboard_por_empresa OWNER TO postgres;
+
+--
+-- Name: analise_estatistica id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.analise_estatistica ALTER COLUMN id SET DEFAULT nextval('public.analise_estatistica_id_seq'::regclass);
+
+
+--
+-- Name: avaliacoes id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.avaliacoes ALTER COLUMN id SET DEFAULT nextval('public.avaliacoes_id_seq'::regclass);
+
+
+--
+-- Name: clinicas id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.clinicas ALTER COLUMN id SET DEFAULT nextval('public.clinicas_id_seq'::regclass);
+
+
+--
+-- Name: empresas_clientes id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.empresas_clientes ALTER COLUMN id SET DEFAULT nextval('public.empresas_clientes_id_seq'::regclass);
+
+
+--
+-- Name: funcionarios id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.funcionarios ALTER COLUMN id SET DEFAULT nextval('public.funcionarios_id_seq'::regclass);
+
+
+--
+-- Name: laudos id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.laudos ALTER COLUMN id SET DEFAULT nextval('public.laudos_id_seq'::regclass);
+
+
+--
+-- Name: lotes_avaliacao id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.lotes_avaliacao ALTER COLUMN id SET DEFAULT nextval('public.lotes_avaliacao_id_seq'::regclass);
+
+
+--
+-- Name: questao_condicoes id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.questao_condicoes ALTER COLUMN id SET DEFAULT nextval('public.questao_condicoes_id_seq'::regclass);
+
+
+--
+-- Name: relatorio_templates id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.relatorio_templates ALTER COLUMN id SET DEFAULT nextval('public.relatorio_templates_id_seq'::regclass);
+
+
+--
+-- Name: respostas id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.respostas ALTER COLUMN id SET DEFAULT nextval('public.respostas_id_seq'::regclass);
+
+
+--
+-- Name: resultados id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.resultados ALTER COLUMN id SET DEFAULT nextval('public.resultados_id_seq'::regclass);
+
+
+--
+-- Data for Name: analise_estatistica; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.analise_estatistica (id, avaliacao_id, grupo, score_original, score_ajustado, anomalia_detectada, tipo_anomalia, recomendacao, created_at) FROM stdin;
+\.
+
+
+--
+-- Data for Name: avaliacoes; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.avaliacoes (id, funcionario_cpf, inicio, envio, status, grupo_atual, criado_em, atualizado_em, lote_id) FROM stdin;
+96	45645645645	2025-11-29 12:40:01.616	2025-11-29 10:01:23.734932	concluida	1	2025-11-29 09:40:01.617196	2025-11-29 09:40:01.617196	1
+99	33333333333	2025-11-29 12:40:01.616	2025-11-29 13:25:05.769658	concluida	1	2025-11-29 09:40:01.624612	2025-11-29 09:40:01.624612	1
+97	22222222222	2025-11-29 12:40:01.616	2025-11-29 13:55:37.255376	concluida	1	2025-11-29 09:40:01.62179	2025-11-29 09:40:01.62179	1
+98	12312312312	2025-11-29 12:40:01.616	2025-11-29 13:56:14.506366	concluida	1	2025-11-29 09:40:01.62311	2025-11-29 09:40:01.62311	1
+100	45645645645	2025-11-29 17:52:42.534	2025-11-29 14:54:17.889472	concluida	1	2025-11-29 14:52:42.535214	2025-11-29 14:52:42.535214	2
+103	33333333333	2025-11-29 17:52:42.534	2025-11-29 15:03:27.904238	concluida	1	2025-11-29 14:52:42.547005	2025-11-29 14:52:42.547005	2
+101	22222222222	2025-11-29 17:52:42.534	\N	concluida	1	2025-11-29 14:52:42.540246	2025-11-29 14:52:42.540246	2
+102	12312312312	2025-11-29 17:52:42.534	\N	concluida	1	2025-11-29 14:52:42.543653	2025-11-29 14:52:42.543653	2
+104	45645645600	2025-11-30 03:26:47.262	2025-11-30 00:29:09.872458	concluida	1	2025-11-30 00:26:47.263141	2025-11-30 00:26:47.263141	3
+105	32132132100	2025-11-30 03:26:47.262	2025-11-30 00:29:37.706843	concluida	1	2025-11-30 00:26:47.267025	2025-11-30 00:26:47.267025	3
+106	12312312300	2025-11-30 03:26:47.262	2025-11-30 00:30:30.042973	concluida	1	2025-11-30 00:26:47.268321	2025-11-30 00:26:47.268321	3
+110	12312312300	2025-11-30 04:53:21.662	\N	inativada	1	2025-11-30 01:53:21.672422	2025-11-30 01:53:21.672422	4
+111	12312312312	2025-11-30 04:53:21.662	\N	inativada	1	2025-11-30 01:53:21.674974	2025-11-30 01:53:21.674974	4
+112	33333333333	2025-11-30 04:53:21.662	\N	inativada	1	2025-11-30 01:53:21.676339	2025-11-30 01:53:21.676339	4
+113	45645645645	2025-11-30 04:54:11.689	2025-11-30 01:55:14.987092	concluida	1	2025-11-30 01:54:11.689883	2025-11-30 01:54:11.689883	5
+114	45645645600	2025-11-30 04:54:11.689	2025-11-30 01:55:47.600328	concluida	1	2025-11-30 01:54:11.692455	2025-11-30 01:54:11.692455	5
+115	32132132100	2025-11-30 04:54:11.689	2025-11-30 01:56:39.245002	concluida	1	2025-11-30 01:54:11.693484	2025-11-30 01:54:11.693484	5
+107	45645645645	2025-11-30 04:53:21.662	\N	inativada	1	2025-11-30 01:53:21.663204	2025-11-30 01:53:21.663204	4
+108	45645645600	2025-11-30 04:53:21.662	\N	inativada	1	2025-11-30 01:53:21.668255	2025-11-30 01:53:21.668255	4
+109	32132132100	2025-11-30 04:53:21.662	\N	inativada	1	2025-11-30 01:53:21.670847	2025-11-30 01:53:21.670847	4
+116	78978978900	2025-11-30 11:52:55.138	2025-11-30 08:53:52.936532	concluida	1	2025-11-30 08:52:55.138806	2025-11-30 08:52:55.138806	6
+117	87545772920	2025-11-30 11:52:55.138	2025-11-30 08:54:29.118634	concluida	1	2025-11-30 08:52:55.141718	2025-11-30 08:52:55.141718	6
+118	78978978900	2025-11-30 21:31:40.012	2025-11-30 18:32:55.078539	concluida	1	2025-11-30 18:31:40.01317	2025-11-30 18:31:40.01317	7
+119	87545772920	2025-11-30 21:31:40.012	2025-11-30 18:33:34.762317	concluida	1	2025-11-30 18:31:40.017788	2025-11-30 18:31:40.017788	7
+120	22222222222	2025-11-30 21:35:14.709	\N	iniciada	1	2025-11-30 18:35:14.710772	2025-11-30 18:35:14.710772	8
+121	33333333333	2025-11-30 21:35:14.709	\N	iniciada	1	2025-11-30 18:35:14.713134	2025-11-30 18:35:14.713134	8
+\.
+
+
+--
+-- Data for Name: clinicas; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.clinicas (id, nome, cnpj, email, telefone, endereco, ativa, criado_em, atualizado_em) FROM stdin;
+1	BPS Brasil - Clínica Padrão	12345678000195	contato@bpsbrasil.com.br	\N	\N	t	2025-11-20 22:33:38.735514	2025-11-20 22:33:38.735514
+2	Clinica Acesso	41877577000184	ronaldofilardo@gmail.com	41992415220	Rua Waldemar Kost, 1130 sobrado 2	t	2025-11-21 00:51:45.26533	2025-11-23 10:05:47.430898
+\.
+
+
+--
+-- Data for Name: clinicas_empresas; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.clinicas_empresas (clinica_id, empresa_id, criado_em) FROM stdin;
+5	1	2025-11-29 17:20:10.651511
+\.
+
+
+--
+-- Data for Name: empresas_clientes; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.empresas_clientes (id, nome, cnpj, email, telefone, endereco, cidade, estado, cep, ativa, clinica_id, criado_em, atualizado_em) FROM stdin;
+1	Indústria Metalúrgica São Paulo	11222333000144	contato@metalurgicasp.com.br	\N	\N	\N	\N	\N	t	1	2025-11-20 22:33:39.949474	2025-11-20 22:33:39.949474
+\.
+
+
+--
+-- Data for Name: funcionarios; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.funcionarios (id, cpf, nome, setor, funcao, email, senha_hash, perfil, ativo, criado_em, atualizado_em, clinica_id, empresa_id, matricula, nivel_cargo, turno, escala) FROM stdin;
+20	12312312300	Jose	Produção	Soldador	jose.silva@bps.com	$2a$10$d14TCzVMiPMXLoSeZfNsu.AuR0sK9rNS6Tl6oNBxF2GzjEUGR3onW	funcionario	f	2025-11-29 17:30:17.017885	2025-11-29 17:30:17.017885	1	1	MAT0051	operacional	Manhã	8x40
+8	12312312312	José da Silva	Produção	Soldador	jose.silva@empresa.com	$2a$10$uexK66L7NOCOw8lJ3tUcPOC3uDseI6ZIV1g2j9PSI.rraG7SxwEMe	funcionario	f	2025-11-23 10:28:58.447369	2025-11-23 10:28:58.447369	1	1	MAT005	operacional	Manhã	8x40
+9	45645645645	Ana Costa	Administrativo	Assistente	ana.costa@empresa.com	$2a$10$J7So1PoIQ73SmqFm7gPrVuFZvFTQv88B.dR15LY4AP4GtNcMkJCk2	funcionario	f	2025-11-23 10:28:58.535204	2025-11-23 10:28:58.535204	1	1	MAT006	operacional	Tarde	8x40
+21	45645645600	Aninha	Administrativo	Assistente	ana.costa@bps.com	$2a$10$I0TEcj8FwaEt0uPTqNbxouN5E6JO3LSxeXy1qPiP/PET0G1hta8Rq	funcionario	f	2025-11-29 17:30:17.105547	2025-11-29 17:30:17.105547	1	1	MAT0061	operacional	Tarde	8x40
+23	32132132100	Getsemani	Engenharia	Engenheira	carla.oliveira@empresa.com	$2a$10$iNm2rm2C7dOkhFxrWI7uWeEgRT46wLVAApVNHELXccFTOt5gEI4lu	funcionario	f	2025-11-29 17:30:17.264085	2025-11-29 17:30:17.264085	1	1	MAT0081	gestao	Comercial	8x44
+2	00000000000	Admin	Administracao	Administrador do Sistema	admin@bps.com.br	$2a$10$vpIUNDBa81q9/QI9qpGFK.TAm9cixuUYoQ/Q1M6IzuuMTSu/29ffa	master	t	2025-11-20 22:33:17.19847	2025-11-29 20:37:25.281141	\N	\N	\N	\N	\N	\N
+5	11111111111	Gestor RH	Recursos Humanos	Gestor de RH	gestor@bps.com.br	$2a$10$3/7upcx6KEjRtCJLOT9MBO.1F4xkPmdddiHn34s7o/ZtUsE1bK37i	rh	t	2025-11-20 22:33:40.215714	2025-11-29 20:37:25.364059	1	\N	\N	\N	\N	\N
+6	22222222222	João Operacional Silva	Produção	Operador de Máquinas	oper01@empresa.com.br	$2a$10$LBYyOR6wLTPwfEcNor/Oe.II8W1drqK9oPkIQO.c7sV8xhq.wqzte	funcionario	t	2025-11-20 22:33:40.310295	2025-11-29 20:37:25.444428	1	1	MAT001	operacional	Manhã	8x40
+7	33333333333	Maria Gestão Santos	Gerência	Gerente de Produção	gestao01@empresa.com.br	$2a$10$5yJelAjd8ZH2JOCstXnFvuGJhuNaJkvhRHyNWp46Epduiz8XXhyWO	funcionario	t	2025-11-20 22:33:40.407688	2025-11-29 20:37:25.534099	1	1	MAT002	gestao	Comercial	8x44
+22	78978978900	Peter	Manutenção	Técnico	pedro.santos@bps.com	$2a$10$T0duIlvQm3BzKYzEtMqJxuVvYUO/qrlHOx2syO4ZV2h14ZPzqixaq	funcionario	f	2025-11-29 17:30:17.182587	2025-11-29 17:30:17.182587	1	1	MAT0071	operacional	Noite	12x36
+19	87545772920	Ronaldo Teste	TI	DEV	rdf@nr-bps.com	$2a$10$C.qxO9GGIUW3CABJbMOKyOgQ2heYXF.uNXYC18.ujpmRD1TB1opTO	funcionario	f	2025-11-29 17:01:25.014269	2025-11-29 17:01:25.014269	1	1	mat01212	gestao	manha	free
+28	99999999999	Emissor de Laudos	Emissão	Emissor de Laudos	emissor@bps.com.br	$2a$10$pBBriHjYyOut8y65NMExueCu715E0Pajd9J6yeJQDlo.Nwy9jqQnG	emissor	t	2025-11-29 20:35:59.26376	2025-11-29 20:37:25.616278	1	\N	\N	\N	\N	\N
+\.
+
+
+--
+-- Data for Name: laudos; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.laudos (id, lote_id, emissor_cpf, observacoes, status, criado_em, emitido_em, enviado_em, atualizado_em) FROM stdin;
+1	2	99999999999	teste de anotações.	enviado	2025-11-29 20:54:39.091986	2025-11-29 22:24:27.097033	2025-11-30 00:03:20.560344	2025-11-30 00:03:20.560344
+4	5	99999999999	\N	rascunho	2025-11-30 02:39:36.765429	\N	\N	2025-11-30 02:39:36.765429
+2	1	99999999999	tsts trqtrq aetqw	enviado	2025-11-30 00:17:28.295416	2025-11-30 00:20:47.056138	2025-11-30 17:54:15.957217	2025-11-30 17:54:15.957217
+3	3	99999999999	teste de laudo	enviado	2025-11-30 01:01:29.010027	2025-11-30 01:04:44.773982	2025-11-30 17:55:08.029485	2025-11-30 17:55:08.029485
+\.
+
+
+--
+-- Data for Name: lotes_avaliacao; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.lotes_avaliacao (id, codigo, clinica_id, empresa_id, titulo, descricao, tipo, status, liberado_por, liberado_em, criado_em, atualizado_em) FROM stdin;
+1	001-291125	1	1	002	teste	completo	concluido	11111111111	2025-11-29 09:40:01.603255	2025-11-29 09:40:01.603255	2025-11-29 09:40:01.603255
+2	002-291125	1	1	002-291125	teste 2 de lotes	completo	concluido	11111111111	2025-11-29 14:52:42.506199	2025-11-29 14:52:42.506199	2025-11-29 14:52:42.506199
+4	002-301125	1	1	004	Lote liberado automaticamente para Indústria Metalúrgica São Paulo	completo	ativo	11111111111	2025-11-30 01:53:21.65219	2025-11-30 01:53:21.65219	2025-11-30 01:53:21.65219
+3	001-301125	1	1	003-301125	teste lote 3	completo	concluido	11111111111	2025-11-30 00:26:47.256664	2025-11-30 00:26:47.256664	2025-11-30 00:26:47.256664
+5	003-301125	1	1	005	Lote liberado automaticamente para Indústria Metalúrgica São Paulo	completo	concluido	11111111111	2025-11-30 01:54:11.68385	2025-11-30 01:54:11.68385	2025-11-30 01:54:11.68385
+6	004-301125	1	1	006	Lote liberado automaticamente para Indústria Metalúrgica São Paulo	completo	concluido	11111111111	2025-11-30 08:52:55.130098	2025-11-30 08:52:55.130098	2025-11-30 08:52:55.130098
+7	005-301125	1	1	007	Lote liberado automaticamente para Indústria Metalúrgica São Paulo	completo	concluido	11111111111	2025-11-30 18:31:39.996599	2025-11-30 18:31:39.996599	2025-11-30 18:31:39.996599
+8	006-301125	1	1	2	Lote liberado automaticamente para Indústria Metalúrgica São Paulo	completo	ativo	11111111111	2025-11-30 18:35:14.706381	2025-11-30 18:35:14.706381	2025-11-30 18:35:14.706381
+\.
+
+
+--
+-- Data for Name: questao_condicoes; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.questao_condicoes (id, questao_id, questao_dependente, operador, valor_condicao, categoria, ativo, created_at) FROM stdin;
+1	60	59	gt	0	behavioral	t	2025-11-20 18:22:21.853497
+2	61	59	gt	0	behavioral	t	2025-11-20 18:22:21.853497
+3	62	59	gt	25	behavioral	t	2025-11-20 18:22:21.853497
+4	63	59	gt	25	behavioral	t	2025-11-20 18:22:21.853497
+5	64	59	gt	25	behavioral	t	2025-11-20 18:22:21.853497
+6	66	65	gt	25	financial	t	2025-11-20 18:22:21.858254
+7	67	65	gt	50	financial	t	2025-11-20 18:22:21.858254
+8	68	65	gt	50	financial	t	2025-11-20 18:22:21.858254
+9	69	65	gt	25	financial	t	2025-11-20 18:22:21.858254
+10	70	65	gt	75	financial	t	2025-11-20 18:22:21.858254
+11	57	56	gt	0	behavioral	t	2025-11-20 18:22:21.859613
+12	58	56	gt	0	behavioral	t	2025-11-20 18:22:21.859613
+\.
+
+
+--
+-- Data for Name: relatorio_templates; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.relatorio_templates (id, nome, tipo, descricao, campos_incluidos, filtros_padrao, formato_saida, ativo, created_at, updated_at) FROM stdin;
+1	Relatório Executivo COPSOQ-III	pdf	Relatório executivo com principais indicadores	{"grupos": [1, 2, 3, 4, 5, 6], "graficos": ["barras", "pizza"], "estatisticas": true, "recomendacoes": true}	{"status": ["concluida"], "periodo": "ultimo_mes"}	A4	t	2025-11-20 18:30:31.314946	2025-11-20 18:30:31.314946
+2	Análise Detalhada por Empresa	excel	Planilha com dados detalhados por empresa cliente	{"todos_dados": true, "pivot_tables": true, "graficos_excel": true}	{"nivel_detalhe": "completo", "incluir_empresas": "todas"}	A4	t	2025-11-20 18:30:31.314946	2025-11-20 18:30:31.314946
+3	Dashboard Gerencial	ambos	Relatório completo para gestores de RH	{"alertas": true, "tendencias": true, "comparativos": true, "resumo_executivo": true}	{"visao": "gerencial", "confidencialidade": "alta"}	A4	t	2025-11-20 18:30:31.314946	2025-11-20 18:30:31.314946
+4	Relatório Comportamental	pdf	Foco em questões comportamentais (jogos, violência, endividamento)	{"grupos": [8, 9, 10], "alertas_criticos": true, "recomendacoes_especializadas": true}	{"nivel_alerta": "alto", "apenas_respostas_positivas": true}	A4	t	2025-11-20 18:30:31.314946	2025-11-20 18:30:31.314946
+\.
+
+
+--
+-- Data for Name: respostas; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.respostas (id, avaliacao_id, grupo, item, valor, criado_em) FROM stdin;
+5875	96	1	Q1	0	2025-11-29 10:00:59.267627
+5876	96	1	Q2	75	2025-11-29 10:01:00.16411
+5877	96	1	Q3	100	2025-11-29 10:01:00.969488
+5878	96	1	Q9	75	2025-11-29 10:01:01.512833
+5879	96	2	Q13	50	2025-11-29 10:01:02.036969
+5880	96	2	Q17	25	2025-11-29 10:01:02.619349
+5881	96	2	Q18	0	2025-11-29 10:01:03.334211
+5882	96	2	Q19	0	2025-11-29 10:01:03.805536
+5883	96	3	Q20	0	2025-11-29 10:01:04.208249
+5884	96	3	Q21	100	2025-11-29 10:01:04.909906
+5885	96	3	Q23	100	2025-11-29 10:01:05.336672
+5886	96	3	Q25	100	2025-11-29 10:01:05.677483
+5887	96	3	Q26	100	2025-11-29 10:01:06.056018
+5888	96	3	Q28	75	2025-11-29 10:01:06.724077
+5889	96	4	Q31	50	2025-11-29 10:01:07.180123
+5890	96	4	Q32	75	2025-11-29 10:01:07.771115
+5891	96	4	Q33	100	2025-11-29 10:01:08.259013
+5892	96	4	Q34	25	2025-11-29 10:01:09.329375
+5893	96	5	Q35	0	2025-11-29 10:01:09.956974
+5894	96	5	Q38	25	2025-11-29 10:01:10.562152
+5895	96	5	Q41	50	2025-11-29 10:01:11.078134
+5896	96	6	Q43	75	2025-11-29 10:01:11.511562
+5897	96	6	Q45	100	2025-11-29 10:01:11.984532
+5898	96	7	Q48	75	2025-11-29 10:01:12.662507
+5899	96	7	Q52	50	2025-11-29 10:01:13.159573
+5900	96	7	Q55	25	2025-11-29 10:01:13.735865
+5901	96	8	Q56	0	2025-11-29 10:01:14.287542
+5902	96	8	Q57	75	2025-11-29 10:01:15.814357
+5903	96	8	Q58	50	2025-11-29 10:01:16.252314
+5904	96	9	Q59	25	2025-11-29 10:01:16.7941
+5905	96	9	Q61	50	2025-11-29 10:01:17.304238
+5906	96	9	Q62	75	2025-11-29 10:01:17.962684
+5907	96	9	Q64	100	2025-11-29 10:01:20.382613
+5908	96	10	Q65	100	2025-11-29 10:01:21.17061
+5909	96	10	Q66	100	2025-11-29 10:01:21.860896
+5910	96	10	Q68	100	2025-11-29 10:01:22.595507
+5911	96	10	Q70	100	2025-11-29 10:01:23.251972
+5912	99	1	Q1	0	2025-11-29 13:24:41.062334
+5913	99	1	Q2	0	2025-11-29 13:24:41.610116
+5914	99	1	Q3	0	2025-11-29 13:24:42.453941
+5915	99	1	Q9	0	2025-11-29 13:24:43.354255
+5916	99	2	Q13	0	2025-11-29 13:24:44.512285
+5917	99	2	Q17	25	2025-11-29 13:24:47.185173
+5918	99	2	Q18	50	2025-11-29 13:24:47.826986
+5919	99	2	Q19	75	2025-11-29 13:24:48.19022
+5920	99	3	Q20	100	2025-11-29 13:24:48.869711
+5921	99	3	Q21	75	2025-11-29 13:24:49.276146
+5922	99	3	Q23	50	2025-11-29 13:24:49.981585
+5923	99	3	Q25	25	2025-11-29 13:24:50.440739
+5924	99	3	Q26	0	2025-11-29 13:24:50.865635
+5925	99	3	Q28	25	2025-11-29 13:24:51.586311
+5926	99	4	Q31	100	2025-11-29 13:24:53.300598
+5927	99	4	Q32	100	2025-11-29 13:24:54.1023
+5928	99	4	Q33	100	2025-11-29 13:24:54.822372
+5929	99	4	Q34	100	2025-11-29 13:24:55.557907
+5930	99	5	Q35	75	2025-11-29 13:24:56.636765
+5931	99	5	Q38	100	2025-11-29 13:24:57.074246
+5932	99	5	Q41	75	2025-11-29 13:24:57.432756
+5933	99	6	Q43	50	2025-11-29 13:24:57.772638
+5934	99	6	Q45	25	2025-11-29 13:24:58.152902
+5935	99	7	Q48	0	2025-11-29 13:24:58.758902
+5936	99	7	Q52	50	2025-11-29 13:24:59.681515
+5937	99	7	Q55	75	2025-11-29 13:25:00.0514
+5938	99	8	Q56	100	2025-11-29 13:25:00.481897
+5939	99	8	Q57	100	2025-11-29 13:25:01.094476
+5940	99	8	Q58	75	2025-11-29 13:25:01.469171
+5941	99	9	Q59	50	2025-11-29 13:25:01.869196
+5942	99	9	Q61	75	2025-11-29 13:25:02.385731
+5943	99	9	Q62	100	2025-11-29 13:25:02.796429
+5944	99	9	Q64	100	2025-11-29 13:25:03.328155
+5945	99	10	Q65	75	2025-11-29 13:25:03.980658
+5946	99	10	Q66	50	2025-11-29 13:25:04.38648
+5947	99	10	Q68	25	2025-11-29 13:25:04.78378
+5948	99	10	Q70	25	2025-11-29 13:25:05.319086
+5949	97	1	Q1	100	2025-11-29 13:55:20.686043
+5950	97	1	Q2	75	2025-11-29 13:55:21.328504
+5951	97	1	Q3	100	2025-11-29 13:55:21.796825
+5952	97	1	Q9	75	2025-11-29 13:55:22.23512
+5953	97	2	Q13	50	2025-11-29 13:55:22.655266
+5954	97	2	Q17	25	2025-11-29 13:55:23.249786
+5955	97	2	Q18	0	2025-11-29 13:55:23.63968
+5956	97	2	Q19	25	2025-11-29 13:55:24.050902
+5957	97	3	Q20	25	2025-11-29 13:55:24.447076
+5958	97	3	Q21	25	2025-11-29 13:55:24.77971
+5959	97	3	Q23	50	2025-11-29 13:55:25.220385
+5960	97	3	Q25	75	2025-11-29 13:55:25.793796
+5961	97	3	Q26	75	2025-11-29 13:55:26.00512
+5962	97	3	Q28	100	2025-11-29 13:55:26.430424
+5963	97	4	Q31	100	2025-11-29 13:55:26.775769
+5964	97	4	Q32	100	2025-11-29 13:55:27.041421
+5965	97	4	Q33	75	2025-11-29 13:55:27.409697
+5966	97	4	Q34	50	2025-11-29 13:55:27.770154
+5967	97	5	Q35	25	2025-11-29 13:55:28.162078
+5968	97	5	Q38	0	2025-11-29 13:55:28.789181
+5969	97	5	Q41	50	2025-11-29 13:55:29.396096
+5970	97	6	Q43	75	2025-11-29 13:55:29.97151
+5971	97	6	Q45	100	2025-11-29 13:55:30.411461
+5972	97	7	Q48	75	2025-11-29 13:55:31.049037
+5973	97	7	Q52	50	2025-11-29 13:55:31.440984
+5974	97	7	Q55	25	2025-11-29 13:55:31.932006
+5975	97	8	Q56	0	2025-11-29 13:55:32.337911
+5976	97	8	Q57	75	2025-11-29 13:55:32.975957
+5977	97	8	Q58	100	2025-11-29 13:55:33.323421
+5978	97	9	Q59	75	2025-11-29 13:55:33.796824
+5979	97	9	Q61	50	2025-11-29 13:55:34.168262
+5980	97	9	Q62	25	2025-11-29 13:55:34.546016
+5981	97	9	Q64	0	2025-11-29 13:55:35.050858
+5982	97	10	Q65	75	2025-11-29 13:55:35.536807
+5983	97	10	Q66	100	2025-11-29 13:55:35.955363
+5984	97	10	Q68	75	2025-11-29 13:55:36.331158
+5985	97	10	Q70	50	2025-11-29 13:55:36.895263
+5986	98	1	Q1	100	2025-11-29 13:55:55.855235
+5987	98	1	Q2	100	2025-11-29 13:55:56.265082
+5988	98	1	Q3	100	2025-11-29 13:55:56.705589
+5989	98	1	Q9	100	2025-11-29 13:55:56.986443
+5990	98	2	Q13	50	2025-11-29 13:55:57.621551
+5991	98	2	Q17	25	2025-11-29 13:55:58.120283
+5992	98	2	Q18	0	2025-11-29 13:55:58.79443
+5993	98	2	Q19	0	2025-11-29 13:55:59.238901
+5994	98	3	Q20	0	2025-11-29 13:55:59.567691
+5995	98	3	Q21	25	2025-11-29 13:56:00.068516
+5996	98	3	Q23	50	2025-11-29 13:56:00.528657
+5997	98	3	Q25	25	2025-11-29 13:56:00.948124
+5998	98	3	Q26	50	2025-11-29 13:56:01.343945
+5999	98	3	Q28	75	2025-11-29 13:56:01.798855
+6000	98	4	Q31	100	2025-11-29 13:56:02.326425
+6001	98	4	Q32	75	2025-11-29 13:56:02.716018
+6002	98	4	Q33	50	2025-11-29 13:56:03.123235
+6003	98	4	Q34	25	2025-11-29 13:56:03.578551
+6004	98	5	Q35	50	2025-11-29 13:56:04.084559
+6005	98	5	Q38	50	2025-11-29 13:56:04.328075
+6006	98	5	Q41	75	2025-11-29 13:56:04.856774
+6007	98	6	Q43	75	2025-11-29 13:56:05.092112
+6008	98	6	Q45	100	2025-11-29 13:56:05.56458
+6009	98	7	Q48	75	2025-11-29 13:56:06.122774
+6010	98	7	Q52	0	2025-11-29 13:56:06.775377
+6011	98	7	Q55	0	2025-11-29 13:56:07.198467
+6012	98	8	Q56	0	2025-11-29 13:56:07.53287
+6013	98	8	Q57	0	2025-11-29 13:56:07.81015
+6014	98	8	Q58	25	2025-11-29 13:56:08.212088
+6015	98	9	Q59	50	2025-11-29 13:56:08.661123
+6016	98	9	Q61	75	2025-11-29 13:56:09.148836
+6017	98	9	Q62	100	2025-11-29 13:56:09.55273
+6018	98	9	Q64	100	2025-11-29 13:56:10.199212
+6019	98	10	Q65	100	2025-11-29 13:56:12.232615
+6020	98	10	Q66	100	2025-11-29 13:56:12.862306
+6021	98	10	Q68	100	2025-11-29 13:56:13.516394
+6022	98	10	Q70	100	2025-11-29 13:56:14.468931
+6023	100	1	Q1	0	2025-11-29 14:53:44.55294
+6024	100	1	Q2	100	2025-11-29 14:53:45.055003
+6025	100	1	Q3	75	2025-11-29 14:53:45.603836
+6026	100	1	Q9	50	2025-11-29 14:53:47.331647
+6027	100	2	Q13	100	2025-11-29 14:53:49.169541
+6028	100	2	Q17	75	2025-11-29 14:53:49.819689
+6029	100	2	Q18	75	2025-11-29 14:53:50.388248
+6030	100	2	Q19	50	2025-11-29 14:53:50.955615
+6031	100	3	Q20	75	2025-11-29 14:53:51.83445
+6032	100	3	Q21	50	2025-11-29 14:53:53.912881
+6033	100	3	Q23	25	2025-11-29 14:53:54.528981
+6034	100	3	Q25	50	2025-11-29 14:53:55.78893
+6035	100	3	Q26	100	2025-11-29 14:53:57.338375
+6036	100	3	Q28	25	2025-11-29 14:53:58.497192
+6037	100	4	Q31	0	2025-11-29 14:54:00.244399
+6038	100	4	Q32	0	2025-11-29 14:54:01.010568
+6039	100	4	Q33	0	2025-11-29 14:54:01.879462
+6040	100	4	Q34	0	2025-11-29 14:54:03.030137
+6041	100	5	Q35	25	2025-11-29 14:54:04.069704
+6042	100	5	Q38	50	2025-11-29 14:54:04.514837
+6043	100	5	Q41	75	2025-11-29 14:54:05.145721
+6044	100	6	Q43	75	2025-11-29 14:54:05.598442
+6045	100	6	Q45	100	2025-11-29 14:54:06.161498
+6046	100	7	Q48	75	2025-11-29 14:54:06.695515
+6047	100	7	Q52	50	2025-11-29 14:54:07.128053
+6048	100	7	Q55	25	2025-11-29 14:54:07.686977
+6049	100	8	Q56	0	2025-11-29 14:54:08.135758
+6050	100	8	Q57	75	2025-11-29 14:54:08.768074
+6051	100	8	Q58	100	2025-11-29 14:54:09.523052
+6052	100	9	Q59	75	2025-11-29 14:54:10.282433
+6053	100	9	Q61	50	2025-11-29 14:54:10.647523
+6054	100	9	Q62	25	2025-11-29 14:54:12.371417
+6055	100	9	Q64	0	2025-11-29 14:54:13.162867
+6056	100	10	Q65	0	2025-11-29 14:54:14.419973
+6057	100	10	Q66	0	2025-11-29 14:54:15.280161
+6058	100	10	Q68	0	2025-11-29 14:54:16.01058
+6059	100	10	Q70	0	2025-11-29 14:54:17.499245
+6060	103	1	Q1	25	2025-11-29 15:03:10.989195
+6061	103	1	Q2	75	2025-11-29 15:03:11.150321
+6062	103	1	Q3	100	2025-11-29 15:03:11.686483
+6063	103	1	Q9	75	2025-11-29 15:03:12.23707
+6064	103	2	Q13	75	2025-11-29 15:03:12.651816
+6065	103	2	Q17	75	2025-11-29 15:03:12.914046
+6066	103	2	Q18	50	2025-11-29 15:03:13.455502
+6067	103	2	Q19	25	2025-11-29 15:03:13.905926
+6068	103	3	Q20	50	2025-11-29 15:03:14.289989
+6069	103	3	Q21	0	2025-11-29 15:03:14.781792
+6070	103	3	Q23	100	2025-11-29 15:03:15.599661
+6071	103	3	Q25	75	2025-11-29 15:03:15.992082
+6072	103	3	Q26	50	2025-11-29 15:03:16.38209
+6073	103	3	Q28	25	2025-11-29 15:03:16.955232
+6074	103	4	Q31	50	2025-11-29 15:03:17.39699
+6075	103	4	Q32	75	2025-11-29 15:03:17.814416
+6076	103	4	Q33	100	2025-11-29 15:03:18.204282
+6077	103	4	Q34	50	2025-11-29 15:03:18.750099
+6078	103	5	Q35	25	2025-11-29 15:03:19.197106
+6079	103	5	Q38	75	2025-11-29 15:03:19.781033
+6080	103	5	Q41	75	2025-11-29 15:03:20.047842
+6081	103	6	Q43	100	2025-11-29 15:03:20.50039
+6082	103	6	Q45	100	2025-11-29 15:03:20.725887
+6083	103	7	Q48	100	2025-11-29 15:03:20.948297
+6084	103	7	Q52	25	2025-11-29 15:03:21.726003
+6085	103	7	Q55	0	2025-11-29 15:03:22.14179
+6086	103	8	Q56	0	2025-11-29 15:03:22.47001
+6087	103	8	Q57	0	2025-11-29 15:03:22.735917
+6088	103	8	Q58	0	2025-11-29 15:03:23.097101
+6089	103	9	Q59	25	2025-11-29 15:03:23.548275
+6090	103	9	Q61	50	2025-11-29 15:03:23.961835
+6091	103	9	Q62	75	2025-11-29 15:03:24.442625
+6092	103	9	Q64	100	2025-11-29 15:03:24.801031
+6093	103	10	Q65	50	2025-11-29 15:03:25.369283
+6094	103	10	Q66	25	2025-11-29 15:03:25.844844
+6095	103	10	Q68	0	2025-11-29 15:03:26.53935
+6096	103	10	Q70	75	2025-11-29 15:03:27.562018
+6097	104	1	Q1	50	2025-11-30 00:28:54.602759
+6098	104	1	Q2	100	2025-11-30 00:28:54.753968
+6099	104	1	Q3	100	2025-11-30 00:28:55.292453
+6100	104	1	Q9	75	2025-11-30 00:28:55.743312
+6101	104	2	Q13	50	2025-11-30 00:28:56.228988
+6102	104	2	Q17	25	2025-11-30 00:28:56.617431
+6103	104	2	Q18	0	2025-11-30 00:28:57.143207
+6104	104	2	Q19	0	2025-11-30 00:28:57.574183
+6105	104	3	Q20	0	2025-11-30 00:28:57.955069
+6106	104	3	Q21	25	2025-11-30 00:28:58.361359
+6107	104	3	Q23	50	2025-11-30 00:28:58.736142
+6108	104	3	Q25	75	2025-11-30 00:28:59.122878
+6109	104	3	Q26	100	2025-11-30 00:28:59.532493
+6110	104	3	Q28	75	2025-11-30 00:28:59.931888
+6111	104	4	Q31	50	2025-11-30 00:29:00.325228
+6112	104	4	Q32	25	2025-11-30 00:29:00.734084
+6113	104	4	Q33	50	2025-11-30 00:29:01.135426
+6114	104	4	Q34	75	2025-11-30 00:29:01.518385
+6115	104	5	Q35	100	2025-11-30 00:29:01.913361
+6116	104	5	Q38	100	2025-11-30 00:29:02.289538
+6117	104	5	Q41	100	2025-11-30 00:29:02.586872
+6118	104	6	Q43	75	2025-11-30 00:29:02.954317
+6119	104	6	Q45	50	2025-11-30 00:29:03.350758
+6120	104	7	Q48	75	2025-11-30 00:29:03.795575
+6121	104	7	Q52	25	2025-11-30 00:29:04.336716
+6122	104	7	Q55	0	2025-11-30 00:29:04.736434
+6123	104	8	Q56	0	2025-11-30 00:29:05.272296
+6124	104	8	Q57	25	2025-11-30 00:29:05.834839
+6125	104	8	Q58	50	2025-11-30 00:29:06.16473
+6126	104	9	Q59	75	2025-11-30 00:29:06.523921
+6127	104	9	Q61	100	2025-11-30 00:29:06.949327
+6128	104	9	Q62	75	2025-11-30 00:29:07.327516
+6129	104	9	Q64	50	2025-11-30 00:29:07.765424
+6130	104	10	Q65	25	2025-11-30 00:29:08.180025
+6131	104	10	Q66	0	2025-11-30 00:29:08.583055
+6132	104	10	Q68	75	2025-11-30 00:29:09.1339
+6133	104	10	Q70	100	2025-11-30 00:29:09.563332
+6134	105	1	Q1	100	2025-11-30 00:29:25.452803
+6135	105	1	Q2	100	2025-11-30 00:29:25.759636
+6136	105	1	Q3	100	2025-11-30 00:29:26.059903
+6137	105	1	Q9	75	2025-11-30 00:29:26.803986
+6138	105	2	Q13	75	2025-11-30 00:29:26.97988
+6139	105	2	Q17	75	2025-11-30 00:29:27.185373
+6140	105	2	Q18	50	2025-11-30 00:29:27.685709
+6141	105	2	Q19	50	2025-11-30 00:29:27.939873
+6142	105	3	Q20	50	2025-11-30 00:29:28.176792
+6143	105	3	Q21	25	2025-11-30 00:29:28.595732
+6144	105	3	Q23	25	2025-11-30 00:29:28.854963
+6145	105	3	Q25	25	2025-11-30 00:29:29.071481
+6146	105	3	Q26	0	2025-11-30 00:29:29.563493
+6147	105	3	Q28	0	2025-11-30 00:29:29.75527
+6148	105	4	Q31	0	2025-11-30 00:29:29.972388
+6149	105	4	Q32	25	2025-11-30 00:29:30.388586
+6150	105	4	Q33	50	2025-11-30 00:29:30.729417
+6151	105	4	Q34	75	2025-11-30 00:29:31.127023
+6152	105	5	Q35	100	2025-11-30 00:29:31.515619
+6153	105	5	Q38	75	2025-11-30 00:29:31.875302
+6154	105	5	Q41	50	2025-11-30 00:29:32.240415
+6155	105	6	Q43	25	2025-11-30 00:29:32.615862
+6156	105	6	Q45	0	2025-11-30 00:29:32.995499
+6157	105	7	Q48	25	2025-11-30 00:29:33.439629
+6158	105	7	Q52	25	2025-11-30 00:29:33.805669
+6159	105	7	Q55	25	2025-11-30 00:29:34.061354
+6160	105	8	Q56	0	2025-11-30 00:29:34.423547
+6161	105	8	Q57	0	2025-11-30 00:29:34.66792
+6162	105	8	Q58	0	2025-11-30 00:29:34.855311
+6163	105	9	Q59	50	2025-11-30 00:29:35.429413
+6164	105	9	Q61	50	2025-11-30 00:29:35.675123
+6165	105	9	Q62	75	2025-11-30 00:29:36.062525
+6166	105	9	Q64	75	2025-11-30 00:29:36.276078
+6167	105	10	Q65	100	2025-11-30 00:29:36.664925
+6168	105	10	Q66	100	2025-11-30 00:29:36.891162
+6169	105	10	Q68	100	2025-11-30 00:29:37.253679
+6170	105	10	Q70	75	2025-11-30 00:29:37.668692
+6171	106	1	Q1	75	2025-11-30 00:30:16.514161
+6172	106	1	Q2	50	2025-11-30 00:30:16.847603
+6173	106	1	Q3	25	2025-11-30 00:30:17.49245
+6174	106	1	Q9	25	2025-11-30 00:30:17.846319
+6175	106	2	Q13	25	2025-11-30 00:30:18.112218
+6176	106	2	Q17	50	2025-11-30 00:30:18.522843
+6177	106	2	Q18	50	2025-11-30 00:30:18.762369
+6178	106	2	Q19	75	2025-11-30 00:30:19.157266
+6179	106	3	Q20	75	2025-11-30 00:30:19.363201
+6180	106	3	Q21	100	2025-11-30 00:30:19.820722
+6181	106	3	Q23	100	2025-11-30 00:30:20.00416
+6182	106	3	Q25	100	2025-11-30 00:30:20.301242
+6183	106	3	Q26	75	2025-11-30 00:30:20.741991
+6184	106	3	Q28	50	2025-11-30 00:30:21.10079
+6185	106	4	Q31	25	2025-11-30 00:30:21.511556
+6186	106	4	Q32	0	2025-11-30 00:30:21.892584
+6187	106	4	Q33	0	2025-11-30 00:30:22.116042
+6188	106	4	Q34	0	2025-11-30 00:30:22.342936
+6189	106	5	Q35	0	2025-11-30 00:30:22.54053
+6190	106	5	Q38	0	2025-11-30 00:30:22.723337
+6191	106	5	Q41	25	2025-11-30 00:30:23.079702
+6192	106	6	Q43	50	2025-11-30 00:30:23.473189
+6193	106	6	Q45	100	2025-11-30 00:30:24.327203
+6194	106	7	Q48	75	2025-11-30 00:30:24.664486
+6195	106	7	Q52	50	2025-11-30 00:30:25.057189
+6196	106	7	Q55	25	2025-11-30 00:30:25.462298
+6197	106	8	Q56	0	2025-11-30 00:30:25.830764
+6198	106	8	Q57	50	2025-11-30 00:30:26.303714
+6199	106	8	Q58	75	2025-11-30 00:30:26.680231
+6200	106	9	Q59	100	2025-11-30 00:30:27.060266
+6201	106	9	Q61	100	2025-11-30 00:30:27.510489
+6202	106	9	Q62	75	2025-11-30 00:30:27.867633
+6203	106	9	Q64	50	2025-11-30 00:30:28.240156
+6204	106	10	Q65	25	2025-11-30 00:30:28.6519
+6205	106	10	Q66	25	2025-11-30 00:30:28.860302
+6206	106	10	Q68	0	2025-11-30 00:30:29.275079
+6207	106	10	Q70	50	2025-11-30 00:30:29.993671
+6208	113	1	Q1	25	2025-11-30 01:55:01.746662
+6209	113	1	Q2	75	2025-11-30 01:55:02.239106
+6210	113	1	Q3	100	2025-11-30 01:55:02.740838
+6211	113	1	Q9	75	2025-11-30 01:55:03.29904
+6212	113	2	Q13	75	2025-11-30 01:55:03.63871
+6213	113	2	Q17	75	2025-11-30 01:55:03.894987
+6214	113	2	Q18	100	2025-11-30 01:55:04.258223
+6215	113	2	Q19	100	2025-11-30 01:55:04.46897
+6216	113	3	Q20	100	2025-11-30 01:55:04.681322
+6217	113	3	Q21	50	2025-11-30 01:55:05.116495
+6218	113	3	Q23	50	2025-11-30 01:55:05.304052
+6219	113	3	Q25	50	2025-11-30 01:55:05.486171
+6220	113	3	Q26	25	2025-11-30 01:55:05.842515
+6221	113	3	Q28	25	2025-11-30 01:55:06.148211
+6222	113	4	Q31	25	2025-11-30 01:55:06.395794
+6223	113	4	Q32	0	2025-11-30 01:55:06.781234
+6224	113	4	Q33	0	2025-11-30 01:55:06.995003
+6225	113	4	Q34	0	2025-11-30 01:55:07.167728
+6226	113	5	Q35	0	2025-11-30 01:55:07.291962
+6227	113	5	Q38	25	2025-11-30 01:55:07.635357
+6228	113	5	Q41	50	2025-11-30 01:55:08.049259
+6229	113	6	Q43	75	2025-11-30 01:55:08.441159
+6230	113	6	Q45	100	2025-11-30 01:55:09.144053
+6231	113	7	Q48	75	2025-11-30 01:55:09.594103
+6232	113	7	Q52	50	2025-11-30 01:55:10.001392
+6233	113	7	Q55	25	2025-11-30 01:55:10.386484
+6234	113	8	Q56	0	2025-11-30 01:55:10.797668
+6235	113	8	Q57	25	2025-11-30 01:55:11.205688
+6236	113	8	Q58	75	2025-11-30 01:55:11.962964
+6237	113	9	Q59	100	2025-11-30 01:55:12.33558
+6238	113	9	Q61	100	2025-11-30 01:55:12.653273
+6239	113	9	Q62	100	2025-11-30 01:55:12.876449
+6240	113	9	Q64	100	2025-11-30 01:55:13.096722
+6241	113	10	Q65	75	2025-11-30 01:55:13.466349
+6242	113	10	Q66	50	2025-11-30 01:55:13.844569
+6243	113	10	Q68	25	2025-11-30 01:55:14.232556
+6244	113	10	Q70	50	2025-11-30 01:55:14.626518
+6245	114	1	Q1	75	2025-11-30 01:55:35.221938
+6246	114	1	Q2	100	2025-11-30 01:55:35.634529
+6247	114	1	Q3	100	2025-11-30 01:55:35.962933
+6248	114	1	Q9	100	2025-11-30 01:55:36.237065
+6249	114	2	Q13	75	2025-11-30 01:55:36.731021
+6250	114	2	Q17	75	2025-11-30 01:55:36.923193
+6251	114	2	Q18	75	2025-11-30 01:55:37.127198
+6252	114	2	Q19	50	2025-11-30 01:55:37.517835
+6253	114	3	Q20	50	2025-11-30 01:55:37.725848
+6254	114	3	Q21	50	2025-11-30 01:55:37.923512
+6255	114	3	Q23	25	2025-11-30 01:55:38.399976
+6256	114	3	Q25	50	2025-11-30 01:55:38.797272
+6257	114	3	Q26	0	2025-11-30 01:55:39.33701
+6258	114	3	Q28	0	2025-11-30 01:55:39.538696
+6259	114	4	Q31	25	2025-11-30 01:55:39.91502
+6260	114	4	Q32	25	2025-11-30 01:55:40.14054
+6261	114	4	Q33	25	2025-11-30 01:55:40.332287
+6262	114	4	Q34	50	2025-11-30 01:55:40.721066
+6263	114	5	Q35	50	2025-11-30 01:55:40.935608
+6264	114	5	Q38	75	2025-11-30 01:55:41.372278
+6265	114	5	Q41	75	2025-11-30 01:55:41.707774
+6266	114	6	Q43	50	2025-11-30 01:55:42.317412
+6267	114	6	Q45	50	2025-11-30 01:55:42.524395
+6268	114	7	Q48	100	2025-11-30 01:55:42.985565
+6269	114	7	Q52	75	2025-11-30 01:55:43.361834
+6270	114	7	Q55	100	2025-11-30 01:55:43.796844
+6271	114	8	Q56	50	2025-11-30 01:55:44.18779
+6272	114	8	Q57	25	2025-11-30 01:55:44.534882
+6273	114	8	Q58	0	2025-11-30 01:55:44.921705
+6274	114	9	Q59	25	2025-11-30 01:55:45.299408
+6275	114	9	Q61	50	2025-11-30 01:55:45.694322
+6276	114	9	Q62	75	2025-11-30 01:55:46.091228
+6277	114	9	Q64	100	2025-11-30 01:55:46.517528
+6278	114	10	Q65	100	2025-11-30 01:55:46.733166
+6279	114	10	Q66	100	2025-11-30 01:55:46.9084
+6280	114	10	Q68	75	2025-11-30 01:55:47.231336
+6281	114	10	Q70	75	2025-11-30 01:55:47.559891
+6282	115	1	Q1	50	2025-11-30 01:56:06.051913
+6283	115	1	Q2	75	2025-11-30 01:56:06.438454
+6284	115	1	Q3	75	2025-11-30 01:56:06.68077
+6285	115	1	Q9	75	2025-11-30 01:56:06.859913
+6286	115	2	Q13	75	2025-11-30 01:56:07.213876
+6287	115	2	Q17	100	2025-11-30 01:56:07.565642
+6288	115	2	Q18	100	2025-11-30 01:56:07.843466
+6289	115	2	Q19	100	2025-11-30 01:56:08.087308
+6290	115	3	Q20	50	2025-11-30 01:56:08.56701
+6291	115	3	Q21	25	2025-11-30 01:56:08.906379
+6292	115	3	Q23	50	2025-11-30 01:56:09.336702
+6293	115	3	Q25	0	2025-11-30 01:56:10.090286
+6294	115	3	Q26	0	2025-11-30 01:56:10.276395
+6295	115	3	Q28	0	2025-11-30 01:56:10.452593
+6296	115	4	Q31	0	2025-11-30 01:56:10.618674
+6297	115	4	Q32	25	2025-11-30 01:56:11.019934
+6298	115	4	Q33	25	2025-11-30 01:56:11.258898
+6299	115	4	Q34	25	2025-11-30 01:56:11.400919
+6300	115	5	Q35	25	2025-11-30 01:56:11.60177
+6301	115	5	Q38	50	2025-11-30 01:56:11.96685
+6302	115	5	Q41	50	2025-11-30 01:56:12.175953
+6303	115	6	Q43	50	2025-11-30 01:56:12.367694
+6304	115	6	Q45	75	2025-11-30 01:56:12.825992
+6305	115	7	Q48	75	2025-11-30 01:56:13.038945
+6306	115	7	Q52	75	2025-11-30 01:56:13.245006
+6307	115	7	Q55	100	2025-11-30 01:56:13.682944
+6308	115	8	Q56	75	2025-11-30 01:56:14.011214
+6309	115	8	Q57	50	2025-11-30 01:56:14.369657
+6310	115	8	Q58	25	2025-11-30 01:56:14.746102
+6311	115	9	Q59	75	2025-11-30 01:56:15.241785
+6312	115	9	Q61	100	2025-11-30 01:56:15.621276
+6313	115	9	Q62	75	2025-11-30 01:56:35.368069
+6314	115	9	Q64	100	2025-11-30 01:56:35.949978
+6315	115	10	Q65	75	2025-11-30 01:56:36.85939
+6316	115	10	Q66	50	2025-11-30 01:56:37.307903
+6317	115	10	Q68	25	2025-11-30 01:56:37.984876
+6318	115	10	Q70	75	2025-11-30 01:56:39.197148
+6319	116	1	Q1	0	2025-11-30 08:53:37.796848
+6320	116	1	Q2	25	2025-11-30 08:53:38.41194
+6321	116	1	Q3	25	2025-11-30 08:53:38.695077
+6322	116	1	Q9	50	2025-11-30 08:53:39.056633
+6323	116	2	Q13	75	2025-11-30 08:53:39.618504
+6324	116	2	Q17	75	2025-11-30 08:53:39.823815
+6325	116	2	Q18	100	2025-11-30 08:53:40.454634
+6326	116	2	Q19	75	2025-11-30 08:53:40.806696
+6327	116	3	Q20	100	2025-11-30 08:53:41.159913
+6328	116	3	Q21	75	2025-11-30 08:53:41.564409
+6329	116	3	Q23	50	2025-11-30 08:53:41.924598
+6330	116	3	Q25	75	2025-11-30 08:53:42.273643
+6331	116	3	Q26	25	2025-11-30 08:53:42.650745
+6332	116	3	Q28	50	2025-11-30 08:53:43.137262
+6333	116	4	Q31	0	2025-11-30 08:53:43.626651
+6334	116	4	Q32	0	2025-11-30 08:53:43.83554
+6335	116	4	Q33	50	2025-11-30 08:53:44.516717
+6336	116	4	Q34	50	2025-11-30 08:53:44.696591
+6337	116	5	Q35	75	2025-11-30 08:53:45.133144
+6338	116	5	Q38	75	2025-11-30 08:53:45.325084
+6339	116	5	Q41	100	2025-11-30 08:53:45.824902
+6340	116	6	Q43	75	2025-11-30 08:53:46.17541
+6341	116	6	Q45	50	2025-11-30 08:53:46.545727
+6342	116	7	Q48	25	2025-11-30 08:53:46.92727
+6343	116	7	Q52	0	2025-11-30 08:53:47.356887
+6344	116	7	Q55	0	2025-11-30 08:53:47.714855
+6345	116	8	Q56	25	2025-11-30 08:53:48.030801
+6346	116	8	Q57	75	2025-11-30 08:53:48.409846
+6347	116	8	Q58	50	2025-11-30 08:53:48.869106
+6348	116	9	Q59	100	2025-11-30 08:53:49.418567
+6349	116	9	Q61	75	2025-11-30 08:53:49.830739
+6350	116	9	Q62	50	2025-11-30 08:53:50.280098
+6351	116	9	Q64	25	2025-11-30 08:53:50.713128
+6352	116	10	Q65	75	2025-11-30 08:53:51.218076
+6353	116	10	Q66	100	2025-11-30 08:53:51.524597
+6354	116	10	Q68	75	2025-11-30 08:53:51.937008
+6355	116	10	Q70	50	2025-11-30 08:53:52.568348
+6356	117	1	Q1	50	2025-11-30 08:54:16.607045
+6357	117	1	Q2	50	2025-11-30 08:54:16.79538
+6358	117	1	Q3	50	2025-11-30 08:54:16.994134
+6359	117	1	Q9	75	2025-11-30 08:54:17.375074
+6360	117	2	Q13	75	2025-11-30 08:54:17.575188
+6361	117	2	Q17	75	2025-11-30 08:54:17.782887
+6362	117	2	Q18	100	2025-11-30 08:54:18.430354
+6363	117	2	Q19	100	2025-11-30 08:54:18.610654
+6364	117	3	Q20	100	2025-11-30 08:54:18.8291
+6365	117	3	Q21	25	2025-11-30 08:54:19.382632
+6366	117	3	Q23	25	2025-11-30 08:54:19.560473
+6367	117	3	Q25	25	2025-11-30 08:54:19.766586
+6368	117	3	Q26	0	2025-11-30 08:54:20.415763
+6369	117	3	Q28	0	2025-11-30 08:54:20.58313
+6370	117	4	Q31	0	2025-11-30 08:54:20.818053
+6371	117	4	Q32	25	2025-11-30 08:54:21.215184
+6372	117	4	Q33	75	2025-11-30 08:54:22.191385
+6373	117	4	Q34	50	2025-11-30 08:54:22.688214
+6374	117	5	Q35	100	2025-11-30 08:54:23.143148
+6375	117	5	Q38	75	2025-11-30 08:54:23.517542
+6376	117	5	Q41	100	2025-11-30 08:54:23.870953
+6377	117	6	Q43	50	2025-11-30 08:54:24.219982
+6378	117	6	Q45	25	2025-11-30 08:54:24.557856
+6379	117	7	Q48	0	2025-11-30 08:54:25.071079
+6380	117	7	Q52	0	2025-11-30 08:54:25.246025
+6381	117	7	Q55	25	2025-11-30 08:54:25.629651
+6382	117	8	Q56	25	2025-11-30 08:54:25.815139
+6383	117	8	Q57	50	2025-11-30 08:54:26.463631
+6384	117	8	Q58	50	2025-11-30 08:54:26.720109
+6385	117	9	Q59	75	2025-11-30 08:54:27.10385
+6386	117	9	Q61	75	2025-11-30 08:54:27.314034
+6387	117	9	Q62	100	2025-11-30 08:54:27.710955
+6388	117	9	Q64	100	2025-11-30 08:54:27.91867
+6389	117	10	Q65	75	2025-11-30 08:54:28.318389
+6390	117	10	Q66	75	2025-11-30 08:54:28.525444
+6391	117	10	Q68	50	2025-11-30 08:54:28.897701
+6392	117	10	Q70	50	2025-11-30 08:54:29.088841
+6393	118	1	Q1	50	2025-11-30 18:32:44.402195
+6394	118	1	Q2	75	2025-11-30 18:32:44.596921
+6395	118	1	Q3	75	2025-11-30 18:32:44.789039
+6396	118	1	Q9	75	2025-11-30 18:32:45.184923
+6397	118	2	Q13	75	2025-11-30 18:32:45.394963
+6398	118	2	Q17	100	2025-11-30 18:32:45.748687
+6399	118	2	Q18	100	2025-11-30 18:32:46.011052
+6400	118	2	Q19	100	2025-11-30 18:32:46.215676
+6401	118	3	Q20	100	2025-11-30 18:32:46.421804
+6402	118	3	Q21	50	2025-11-30 18:32:46.723302
+6403	118	3	Q23	50	2025-11-30 18:32:47.085957
+6404	118	3	Q25	25	2025-11-30 18:32:47.391497
+6405	118	3	Q26	25	2025-11-30 18:32:47.589191
+6406	118	3	Q28	25	2025-11-30 18:32:47.760041
+6407	118	4	Q31	25	2025-11-30 18:32:47.893181
+6408	118	4	Q32	0	2025-11-30 18:32:48.381625
+6409	118	4	Q33	0	2025-11-30 18:32:48.577233
+6410	118	4	Q34	0	2025-11-30 18:32:48.808968
+6411	118	5	Q35	25	2025-11-30 18:32:49.13153
+6412	118	5	Q38	50	2025-11-30 18:32:49.464642
+6413	118	5	Q41	75	2025-11-30 18:32:49.812748
+6414	118	6	Q43	100	2025-11-30 18:32:50.201301
+6415	118	6	Q45	100	2025-11-30 18:32:50.454597
+6416	118	7	Q48	100	2025-11-30 18:32:50.62792
+6417	118	7	Q52	100	2025-11-30 18:32:50.825362
+6418	118	7	Q55	75	2025-11-30 18:32:51.110037
+6419	118	8	Q56	75	2025-11-30 18:32:51.376871
+6420	118	8	Q57	50	2025-11-30 18:32:51.679061
+6421	118	8	Q58	50	2025-11-30 18:32:51.919082
+6422	118	9	Q59	25	2025-11-30 18:32:52.217324
+6423	118	9	Q61	25	2025-11-30 18:32:52.433511
+6424	118	9	Q62	0	2025-11-30 18:32:52.880344
+6425	118	9	Q64	0	2025-11-30 18:32:53.100452
+6426	118	10	Q65	0	2025-11-30 18:32:53.3405
+6427	118	10	Q66	25	2025-11-30 18:32:53.707306
+6428	118	10	Q68	50	2025-11-30 18:32:54.096715
+6429	118	10	Q70	75	2025-11-30 18:32:54.571774
+6430	119	1	Q1	25	2025-11-30 18:33:23.181792
+6431	119	1	Q2	25	2025-11-30 18:33:23.344983
+6432	119	1	Q3	25	2025-11-30 18:33:23.510573
+6433	119	1	Q9	50	2025-11-30 18:33:23.869505
+6434	119	2	Q13	50	2025-11-30 18:33:24.066443
+6435	119	2	Q17	50	2025-11-30 18:33:24.267739
+6436	119	2	Q18	75	2025-11-30 18:33:24.86884
+6437	119	2	Q19	75	2025-11-30 18:33:25.053888
+6438	119	3	Q20	75	2025-11-30 18:33:25.224376
+6439	119	3	Q21	100	2025-11-30 18:33:25.629646
+6440	119	3	Q23	100	2025-11-30 18:33:25.799032
+6441	119	3	Q25	100	2025-11-30 18:33:25.995429
+6442	119	3	Q26	75	2025-11-30 18:33:26.357729
+6443	119	3	Q28	75	2025-11-30 18:33:26.727062
+6444	119	4	Q31	50	2025-11-30 18:33:27.074689
+6445	119	4	Q32	50	2025-11-30 18:33:27.411977
+6446	119	4	Q33	25	2025-11-30 18:33:27.896236
+6447	119	4	Q34	25	2025-11-30 18:33:28.114389
+6448	119	5	Q35	0	2025-11-30 18:33:28.538927
+6449	119	5	Q38	0	2025-11-30 18:33:28.823207
+6450	119	5	Q41	25	2025-11-30 18:33:29.251153
+6451	119	6	Q43	25	2025-11-30 18:33:29.516227
+6452	119	6	Q45	50	2025-11-30 18:33:30.139321
+6453	119	7	Q48	50	2025-11-30 18:33:30.410909
+6454	119	7	Q52	75	2025-11-30 18:33:30.809621
+6455	119	7	Q55	75	2025-11-30 18:33:31.04646
+6456	119	8	Q56	75	2025-11-30 18:33:31.216958
+6457	119	8	Q57	75	2025-11-30 18:33:31.390272
+6458	119	8	Q58	100	2025-11-30 18:33:31.857527
+6459	119	9	Q59	100	2025-11-30 18:33:32.028604
+6460	119	9	Q61	100	2025-11-30 18:33:32.239696
+6461	119	9	Q62	75	2025-11-30 18:33:32.671771
+6462	119	9	Q64	75	2025-11-30 18:33:33.039855
+6463	119	10	Q65	50	2025-11-30 18:33:33.667398
+6464	119	10	Q66	50	2025-11-30 18:33:33.882979
+6465	119	10	Q68	25	2025-11-30 18:33:34.515863
+6466	119	10	Q70	25	2025-11-30 18:33:34.725846
+\.
+
+
+--
+-- Data for Name: resultados; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.resultados (id, avaliacao_id, grupo, dominio, score, categoria, criado_em) FROM stdin;
+861	96	1	Demandas no Trabalho	62.50	medio	2025-11-29 10:01:23.716304
+862	96	2	Organização e Conteúdo do Trabalho	18.75	baixo	2025-11-29 10:01:23.723793
+863	96	3	Relações Sociais e Liderança	79.17	alto	2025-11-29 10:01:23.725467
+864	96	4	Interface Trabalho-Indivíduo	62.50	medio	2025-11-29 10:01:23.726741
+865	96	5	Valores Organizacionais	25.00	baixo	2025-11-29 10:01:23.727875
+866	96	6	Traços de Personalidade	87.50	alto	2025-11-29 10:01:23.728971
+867	96	7	Saúde e Bem-Estar	50.00	medio	2025-11-29 10:01:23.730033
+868	96	8	Comportamentos Ofensivos	41.67	medio	2025-11-29 10:01:23.731276
+869	96	9	Comportamento de Jogo	62.50	medio	2025-11-29 10:01:23.732607
+870	96	10	Endividamento Financeiro	100.00	alto	2025-11-29 10:01:23.733798
+871	99	1	Demandas no Trabalho	0.00	baixo	2025-11-29 13:25:05.754835
+872	99	2	Organização e Conteúdo do Trabalho	37.50	medio	2025-11-29 13:25:05.759942
+873	99	3	Relações Sociais e Liderança	45.83	medio	2025-11-29 13:25:05.76254
+874	99	4	Interface Trabalho-Indivíduo	100.00	alto	2025-11-29 13:25:05.763631
+875	99	5	Valores Organizacionais	83.33	alto	2025-11-29 13:25:05.764471
+876	99	6	Traços de Personalidade	37.50	medio	2025-11-29 13:25:05.765282
+877	99	7	Saúde e Bem-Estar	41.67	medio	2025-11-29 13:25:05.766048
+878	99	8	Comportamentos Ofensivos	91.67	alto	2025-11-29 13:25:05.766869
+879	99	9	Comportamento de Jogo	81.25	alto	2025-11-29 13:25:05.767871
+880	99	10	Endividamento Financeiro	43.75	medio	2025-11-29 13:25:05.768812
+881	97	1	Demandas no Trabalho	87.50	alto	2025-11-29 13:55:37.241362
+882	97	2	Organização e Conteúdo do Trabalho	25.00	baixo	2025-11-29 13:55:37.24766
+883	97	3	Relações Sociais e Liderança	58.33	medio	2025-11-29 13:55:37.248945
+884	97	4	Interface Trabalho-Indivíduo	81.25	alto	2025-11-29 13:55:37.250062
+885	97	5	Valores Organizacionais	25.00	baixo	2025-11-29 13:55:37.250884
+886	97	6	Traços de Personalidade	87.50	alto	2025-11-29 13:55:37.251572
+887	97	7	Saúde e Bem-Estar	50.00	medio	2025-11-29 13:55:37.252336
+888	97	8	Comportamentos Ofensivos	58.33	medio	2025-11-29 13:55:37.253021
+889	97	9	Comportamento de Jogo	37.50	medio	2025-11-29 13:55:37.253672
+890	97	10	Endividamento Financeiro	75.00	alto	2025-11-29 13:55:37.254363
+891	98	1	Demandas no Trabalho	100.00	alto	2025-11-29 13:56:14.489201
+892	98	2	Organização e Conteúdo do Trabalho	18.75	baixo	2025-11-29 13:56:14.49113
+893	98	3	Relações Sociais e Liderança	37.50	medio	2025-11-29 13:56:14.492934
+894	98	4	Interface Trabalho-Indivíduo	62.50	medio	2025-11-29 13:56:14.494503
+895	98	5	Valores Organizacionais	58.33	medio	2025-11-29 13:56:14.495662
+896	98	6	Traços de Personalidade	87.50	alto	2025-11-29 13:56:14.49729
+897	98	7	Saúde e Bem-Estar	25.00	baixo	2025-11-29 13:56:14.50127
+898	98	8	Comportamentos Ofensivos	8.33	baixo	2025-11-29 13:56:14.502537
+899	98	9	Comportamento de Jogo	81.25	alto	2025-11-29 13:56:14.503561
+900	98	10	Endividamento Financeiro	100.00	alto	2025-11-29 13:56:14.504792
+901	100	1	Demandas no Trabalho	56.25	medio	2025-11-29 14:54:17.870394
+902	100	2	Organização e Conteúdo do Trabalho	75.00	alto	2025-11-29 14:54:17.875141
+903	100	3	Relações Sociais e Liderança	54.17	medio	2025-11-29 14:54:17.876521
+904	100	4	Interface Trabalho-Indivíduo	0.00	baixo	2025-11-29 14:54:17.877833
+905	100	5	Valores Organizacionais	50.00	medio	2025-11-29 14:54:17.884452
+906	100	6	Traços de Personalidade	87.50	alto	2025-11-29 14:54:17.885743
+907	100	7	Saúde e Bem-Estar	50.00	medio	2025-11-29 14:54:17.886684
+908	100	8	Comportamentos Ofensivos	58.33	medio	2025-11-29 14:54:17.88744
+909	100	9	Comportamento de Jogo	37.50	medio	2025-11-29 14:54:17.888117
+910	100	10	Endividamento Financeiro	0.00	baixo	2025-11-29 14:54:17.888782
+911	103	1	Demandas no Trabalho	68.75	alto	2025-11-29 15:03:27.890065
+912	103	2	Organização e Conteúdo do Trabalho	56.25	medio	2025-11-29 15:03:27.894664
+913	103	3	Relações Sociais e Liderança	50.00	medio	2025-11-29 15:03:27.896583
+914	103	4	Interface Trabalho-Indivíduo	68.75	alto	2025-11-29 15:03:27.898153
+915	103	5	Valores Organizacionais	58.33	medio	2025-11-29 15:03:27.899106
+916	103	6	Traços de Personalidade	100.00	alto	2025-11-29 15:03:27.899936
+917	103	7	Saúde e Bem-Estar	41.67	medio	2025-11-29 15:03:27.900848
+918	103	8	Comportamentos Ofensivos	0.00	baixo	2025-11-29 15:03:27.901809
+919	103	9	Comportamento de Jogo	62.50	medio	2025-11-29 15:03:27.902843
+920	103	10	Endividamento Financeiro	37.50	medio	2025-11-29 15:03:27.903618
+921	104	1	Demandas no Trabalho	81.25	alto	2025-11-30 00:29:09.854123
+922	104	2	Organização e Conteúdo do Trabalho	18.75	baixo	2025-11-30 00:29:09.861148
+923	104	3	Relações Sociais e Liderança	54.17	medio	2025-11-30 00:29:09.862808
+924	104	4	Interface Trabalho-Indivíduo	50.00	medio	2025-11-30 00:29:09.865068
+925	104	5	Valores Organizacionais	100.00	alto	2025-11-30 00:29:09.866112
+926	104	6	Traços de Personalidade	62.50	medio	2025-11-30 00:29:09.866936
+927	104	7	Saúde e Bem-Estar	33.33	medio	2025-11-30 00:29:09.868088
+928	104	8	Comportamentos Ofensivos	25.00	baixo	2025-11-30 00:29:09.869046
+929	104	9	Comportamento de Jogo	75.00	alto	2025-11-30 00:29:09.870538
+930	104	10	Endividamento Financeiro	50.00	medio	2025-11-30 00:29:09.871674
+931	105	1	Demandas no Trabalho	93.75	alto	2025-11-30 00:29:37.694606
+932	105	2	Organização e Conteúdo do Trabalho	62.50	medio	2025-11-30 00:29:37.695729
+933	105	3	Relações Sociais e Liderança	20.83	baixo	2025-11-30 00:29:37.696772
+934	105	4	Interface Trabalho-Indivíduo	37.50	medio	2025-11-30 00:29:37.697776
+935	105	5	Valores Organizacionais	75.00	alto	2025-11-30 00:29:37.698708
+936	105	6	Traços de Personalidade	12.50	baixo	2025-11-30 00:29:37.699551
+937	105	7	Saúde e Bem-Estar	25.00	baixo	2025-11-30 00:29:37.700202
+938	105	8	Comportamentos Ofensivos	0.00	baixo	2025-11-30 00:29:37.700927
+939	105	9	Comportamento de Jogo	62.50	medio	2025-11-30 00:29:37.70275
+940	105	10	Endividamento Financeiro	93.75	alto	2025-11-30 00:29:37.704626
+941	106	1	Demandas no Trabalho	43.75	medio	2025-11-30 00:30:30.025192
+942	106	2	Organização e Conteúdo do Trabalho	50.00	medio	2025-11-30 00:30:30.028054
+943	106	3	Relações Sociais e Liderança	83.33	alto	2025-11-30 00:30:30.029255
+944	106	4	Interface Trabalho-Indivíduo	6.25	baixo	2025-11-30 00:30:30.030107
+945	106	5	Valores Organizacionais	8.33	baixo	2025-11-30 00:30:30.031031
+946	106	6	Traços de Personalidade	75.00	alto	2025-11-30 00:30:30.031861
+947	106	7	Saúde e Bem-Estar	50.00	medio	2025-11-30 00:30:30.032601
+948	106	8	Comportamentos Ofensivos	41.67	medio	2025-11-30 00:30:30.033345
+949	106	9	Comportamento de Jogo	81.25	alto	2025-11-30 00:30:30.037918
+950	106	10	Endividamento Financeiro	25.00	baixo	2025-11-30 00:30:30.040906
+951	113	1	Demandas no Trabalho	68.75	alto	2025-11-30 01:55:14.966601
+952	113	2	Organização e Conteúdo do Trabalho	87.50	alto	2025-11-30 01:55:14.973743
+953	113	3	Relações Sociais e Liderança	50.00	medio	2025-11-30 01:55:14.977019
+954	113	4	Interface Trabalho-Indivíduo	6.25	baixo	2025-11-30 01:55:14.978295
+955	113	5	Valores Organizacionais	25.00	baixo	2025-11-30 01:55:14.980324
+956	113	6	Traços de Personalidade	87.50	alto	2025-11-30 01:55:14.981306
+957	113	7	Saúde e Bem-Estar	50.00	medio	2025-11-30 01:55:14.982154
+958	113	8	Comportamentos Ofensivos	33.33	medio	2025-11-30 01:55:14.983097
+959	113	9	Comportamento de Jogo	100.00	alto	2025-11-30 01:55:14.984005
+960	113	10	Endividamento Financeiro	50.00	medio	2025-11-30 01:55:14.985303
+961	114	1	Demandas no Trabalho	93.75	alto	2025-11-30 01:55:47.584887
+962	114	2	Organização e Conteúdo do Trabalho	68.75	alto	2025-11-30 01:55:47.589352
+963	114	3	Relações Sociais e Liderança	29.17	baixo	2025-11-30 01:55:47.592518
+964	114	4	Interface Trabalho-Indivíduo	31.25	baixo	2025-11-30 01:55:47.594009
+965	114	5	Valores Organizacionais	66.67	alto	2025-11-30 01:55:47.595282
+966	114	6	Traços de Personalidade	50.00	medio	2025-11-30 01:55:47.596152
+967	114	7	Saúde e Bem-Estar	91.67	alto	2025-11-30 01:55:47.597091
+968	114	8	Comportamentos Ofensivos	25.00	baixo	2025-11-30 01:55:47.598096
+969	114	9	Comportamento de Jogo	62.50	medio	2025-11-30 01:55:47.598966
+970	114	10	Endividamento Financeiro	87.50	alto	2025-11-30 01:55:47.599681
+971	115	1	Demandas no Trabalho	68.75	alto	2025-11-30 01:56:39.227201
+972	115	2	Organização e Conteúdo do Trabalho	93.75	alto	2025-11-30 01:56:39.230417
+973	115	3	Relações Sociais e Liderança	20.83	baixo	2025-11-30 01:56:39.231578
+974	115	4	Interface Trabalho-Indivíduo	18.75	baixo	2025-11-30 01:56:39.232442
+975	115	5	Valores Organizacionais	41.67	medio	2025-11-30 01:56:39.233358
+976	115	6	Traços de Personalidade	62.50	medio	2025-11-30 01:56:39.234617
+977	115	7	Saúde e Bem-Estar	83.33	alto	2025-11-30 01:56:39.236009
+978	115	8	Comportamentos Ofensivos	50.00	medio	2025-11-30 01:56:39.238515
+979	115	9	Comportamento de Jogo	87.50	alto	2025-11-30 01:56:39.241978
+980	115	10	Endividamento Financeiro	56.25	medio	2025-11-30 01:56:39.243819
+981	116	1	Demandas no Trabalho	25.00	baixo	2025-11-30 08:53:52.921589
+982	116	2	Organização e Conteúdo do Trabalho	81.25	alto	2025-11-30 08:53:52.927058
+983	116	3	Relações Sociais e Liderança	62.50	medio	2025-11-30 08:53:52.928956
+984	116	4	Interface Trabalho-Indivíduo	25.00	baixo	2025-11-30 08:53:52.930145
+985	116	5	Valores Organizacionais	83.33	alto	2025-11-30 08:53:52.931017
+986	116	6	Traços de Personalidade	62.50	medio	2025-11-30 08:53:52.931803
+987	116	7	Saúde e Bem-Estar	8.33	baixo	2025-11-30 08:53:52.932712
+988	116	8	Comportamentos Ofensivos	50.00	medio	2025-11-30 08:53:52.933958
+989	116	9	Comportamento de Jogo	62.50	medio	2025-11-30 08:53:52.934778
+990	116	10	Endividamento Financeiro	75.00	alto	2025-11-30 08:53:52.935466
+991	117	1	Demandas no Trabalho	56.25	medio	2025-11-30 08:54:29.109453
+992	117	2	Organização e Conteúdo do Trabalho	87.50	alto	2025-11-30 08:54:29.110184
+993	117	3	Relações Sociais e Liderança	29.17	baixo	2025-11-30 08:54:29.110883
+994	117	4	Interface Trabalho-Indivíduo	37.50	medio	2025-11-30 08:54:29.111737
+995	117	5	Valores Organizacionais	91.67	alto	2025-11-30 08:54:29.11271
+996	117	6	Traços de Personalidade	37.50	medio	2025-11-30 08:54:29.113381
+997	117	7	Saúde e Bem-Estar	8.33	baixo	2025-11-30 08:54:29.114057
+998	117	8	Comportamentos Ofensivos	41.67	medio	2025-11-30 08:54:29.114696
+999	117	9	Comportamento de Jogo	87.50	alto	2025-11-30 08:54:29.115382
+1000	117	10	Endividamento Financeiro	62.50	medio	2025-11-30 08:54:29.116503
+1001	118	1	Demandas no Trabalho	68.75	alto	2025-11-30 18:32:55.061532
+1002	118	2	Organização e Conteúdo do Trabalho	93.75	alto	2025-11-30 18:32:55.069035
+1003	118	3	Relações Sociais e Liderança	45.83	medio	2025-11-30 18:32:55.070391
+1004	118	4	Interface Trabalho-Indivíduo	6.25	baixo	2025-11-30 18:32:55.07168
+1005	118	5	Valores Organizacionais	50.00	medio	2025-11-30 18:32:55.073255
+1006	118	6	Traços de Personalidade	100.00	alto	2025-11-30 18:32:55.074458
+1007	118	7	Saúde e Bem-Estar	91.67	alto	2025-11-30 18:32:55.075396
+1008	118	8	Comportamentos Ofensivos	58.33	medio	2025-11-30 18:32:55.076225
+1009	118	9	Comportamento de Jogo	12.50	baixo	2025-11-30 18:32:55.07694
+1010	118	10	Endividamento Financeiro	37.50	medio	2025-11-30 18:32:55.077726
+1011	119	1	Demandas no Trabalho	31.25	baixo	2025-11-30 18:33:34.748412
+1012	119	2	Organização e Conteúdo do Trabalho	62.50	medio	2025-11-30 18:33:34.750526
+1013	119	3	Relações Sociais e Liderança	87.50	alto	2025-11-30 18:33:34.75403
+1014	119	4	Interface Trabalho-Indivíduo	37.50	medio	2025-11-30 18:33:34.755539
+1015	119	5	Valores Organizacionais	8.33	baixo	2025-11-30 18:33:34.756596
+1016	119	6	Traços de Personalidade	37.50	medio	2025-11-30 18:33:34.757573
+1017	119	7	Saúde e Bem-Estar	66.67	alto	2025-11-30 18:33:34.758581
+1018	119	8	Comportamentos Ofensivos	83.33	alto	2025-11-30 18:33:34.759521
+1019	119	9	Comportamento de Jogo	87.50	alto	2025-11-30 18:33:34.76043
+1020	119	10	Endividamento Financeiro	37.50	medio	2025-11-30 18:33:34.761397
+\.
+
+
+--
+-- Name: analise_estatistica_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.analise_estatistica_id_seq', 7, true);
+
+
+--
+-- Name: avaliacoes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.avaliacoes_id_seq', 121, true);
+
+
+--
+-- Name: clinicas_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.clinicas_id_seq', 2, true);
+
+
+--
+-- Name: empresas_clientes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.empresas_clientes_id_seq', 1, true);
+
+
+--
+-- Name: funcionarios_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.funcionarios_id_seq', 38, true);
+
+
+--
+-- Name: laudos_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.laudos_id_seq', 4, true);
+
+
+--
+-- Name: lotes_avaliacao_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.lotes_avaliacao_id_seq', 8, true);
+
+
+--
+-- Name: questao_condicoes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.questao_condicoes_id_seq', 12, true);
+
+
+--
+-- Name: relatorio_templates_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.relatorio_templates_id_seq', 4, true);
+
+
+--
+-- Name: respostas_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.respostas_id_seq', 6466, true);
+
+
+--
+-- Name: resultados_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.resultados_id_seq', 1020, true);
+
+
+--
+-- Name: analise_estatistica analise_estatistica_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.analise_estatistica
+    ADD CONSTRAINT analise_estatistica_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: avaliacoes avaliacoes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.avaliacoes
+    ADD CONSTRAINT avaliacoes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: clinicas clinicas_cnpj_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.clinicas
+    ADD CONSTRAINT clinicas_cnpj_key UNIQUE (cnpj);
+
+
+--
+-- Name: clinicas_empresas clinicas_empresas_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.clinicas_empresas
+    ADD CONSTRAINT clinicas_empresas_pkey PRIMARY KEY (clinica_id, empresa_id);
+
+
+--
+-- Name: clinicas clinicas_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.clinicas
+    ADD CONSTRAINT clinicas_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: empresas_clientes empresas_clientes_cnpj_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.empresas_clientes
+    ADD CONSTRAINT empresas_clientes_cnpj_key UNIQUE (cnpj);
+
+
+--
+-- Name: empresas_clientes empresas_clientes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.empresas_clientes
+    ADD CONSTRAINT empresas_clientes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: funcionarios funcionarios_cpf_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.funcionarios
+    ADD CONSTRAINT funcionarios_cpf_key UNIQUE (cpf);
+
+
+--
+-- Name: funcionarios funcionarios_matricula_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.funcionarios
+    ADD CONSTRAINT funcionarios_matricula_key UNIQUE (matricula);
+
+
+--
+-- Name: funcionarios funcionarios_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.funcionarios
+    ADD CONSTRAINT funcionarios_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: laudos laudos_lote_emissor_unique; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.laudos
+    ADD CONSTRAINT laudos_lote_emissor_unique UNIQUE (lote_id, emissor_cpf);
+
+
+--
+-- Name: laudos laudos_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.laudos
+    ADD CONSTRAINT laudos_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: lotes_avaliacao lotes_avaliacao_codigo_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.lotes_avaliacao
+    ADD CONSTRAINT lotes_avaliacao_codigo_key UNIQUE (codigo);
+
+
+--
+-- Name: lotes_avaliacao lotes_avaliacao_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.lotes_avaliacao
+    ADD CONSTRAINT lotes_avaliacao_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: questao_condicoes questao_condicoes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.questao_condicoes
+    ADD CONSTRAINT questao_condicoes_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: relatorio_templates relatorio_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.relatorio_templates
+    ADD CONSTRAINT relatorio_templates_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: respostas respostas_avaliacao_id_grupo_item_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.respostas
+    ADD CONSTRAINT respostas_avaliacao_id_grupo_item_key UNIQUE (avaliacao_id, grupo, item);
+
+
+--
+-- Name: respostas respostas_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.respostas
+    ADD CONSTRAINT respostas_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: resultados resultados_avaliacao_id_grupo_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.resultados
+    ADD CONSTRAINT resultados_avaliacao_id_grupo_key UNIQUE (avaliacao_id, grupo);
+
+
+--
+-- Name: resultados resultados_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.resultados
+    ADD CONSTRAINT resultados_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: idx_avaliacoes_funcionario; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_avaliacoes_funcionario ON public.avaliacoes USING btree (funcionario_cpf);
+
+
+--
+-- Name: idx_avaliacoes_lote; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_avaliacoes_lote ON public.avaliacoes USING btree (lote_id);
+
+
+--
+-- Name: idx_avaliacoes_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_avaliacoes_status ON public.avaliacoes USING btree (status);
+
+
+--
+-- Name: idx_clinicas_empresas_clinica; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_clinicas_empresas_clinica ON public.clinicas_empresas USING btree (clinica_id);
+
+
+--
+-- Name: idx_clinicas_empresas_empresa; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_clinicas_empresas_empresa ON public.clinicas_empresas USING btree (empresa_id);
+
+
+--
+-- Name: idx_empresas_ativa; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_empresas_ativa ON public.empresas_clientes USING btree (ativa);
+
+
+--
+-- Name: idx_empresas_clinica; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_empresas_clinica ON public.empresas_clientes USING btree (clinica_id);
+
+
+--
+-- Name: idx_empresas_cnpj; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_empresas_cnpj ON public.empresas_clientes USING btree (cnpj);
+
+
+--
+-- Name: idx_funcionarios_clinica; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_funcionarios_clinica ON public.funcionarios USING btree (clinica_id);
+
+
+--
+-- Name: idx_funcionarios_empresa; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_funcionarios_empresa ON public.funcionarios USING btree (empresa_id);
+
+
+--
+-- Name: idx_funcionarios_matricula; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_funcionarios_matricula ON public.funcionarios USING btree (matricula);
+
+
+--
+-- Name: idx_funcionarios_nivel_cargo; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_funcionarios_nivel_cargo ON public.funcionarios USING btree (nivel_cargo);
+
+
+--
+-- Name: idx_laudos_emissor; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_laudos_emissor ON public.laudos USING btree (emissor_cpf);
+
+
+--
+-- Name: idx_laudos_lote; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_laudos_lote ON public.laudos USING btree (lote_id);
+
+
+--
+-- Name: idx_laudos_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_laudos_status ON public.laudos USING btree (status);
+
+
+--
+-- Name: idx_lotes_clinica; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_lotes_clinica ON public.lotes_avaliacao USING btree (clinica_id);
+
+
+--
+-- Name: idx_lotes_codigo; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_lotes_codigo ON public.lotes_avaliacao USING btree (codigo);
+
+
+--
+-- Name: idx_lotes_empresa; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_lotes_empresa ON public.lotes_avaliacao USING btree (empresa_id);
+
+
+--
+-- Name: idx_lotes_status; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_lotes_status ON public.lotes_avaliacao USING btree (status);
+
+
+--
+-- Name: idx_questao_condicoes_dependente; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_questao_condicoes_dependente ON public.questao_condicoes USING btree (questao_dependente);
+
+
+--
+-- Name: idx_questao_condicoes_questao; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_questao_condicoes_questao ON public.questao_condicoes USING btree (questao_id);
+
+
+--
+-- Name: idx_respostas_avaliacao; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_respostas_avaliacao ON public.respostas USING btree (avaliacao_id);
+
+
+--
+-- Name: idx_resultados_avaliacao; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX idx_resultados_avaliacao ON public.resultados USING btree (avaliacao_id);
+
+
+--
+-- Name: avaliacoes avaliacoes_funcionario_cpf_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.avaliacoes
+    ADD CONSTRAINT avaliacoes_funcionario_cpf_fkey FOREIGN KEY (funcionario_cpf) REFERENCES public.funcionarios(cpf) ON DELETE CASCADE;
+
+
+--
+-- Name: avaliacoes avaliacoes_lote_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.avaliacoes
+    ADD CONSTRAINT avaliacoes_lote_id_fkey FOREIGN KEY (lote_id) REFERENCES public.lotes_avaliacao(id) ON DELETE SET NULL;
+
+
+--
+-- Name: clinicas_empresas clinicas_empresas_clinica_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.clinicas_empresas
+    ADD CONSTRAINT clinicas_empresas_clinica_id_fkey FOREIGN KEY (clinica_id) REFERENCES public.funcionarios(id) ON DELETE CASCADE;
+
+
+--
+-- Name: clinicas_empresas clinicas_empresas_empresa_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.clinicas_empresas
+    ADD CONSTRAINT clinicas_empresas_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas_clientes(id) ON DELETE CASCADE;
+
+
+--
+-- Name: empresas_clientes empresas_clientes_clinica_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.empresas_clientes
+    ADD CONSTRAINT empresas_clientes_clinica_id_fkey FOREIGN KEY (clinica_id) REFERENCES public.clinicas(id) ON DELETE CASCADE;
+
+
+--
+-- Name: funcionarios funcionarios_clinica_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.funcionarios
+    ADD CONSTRAINT funcionarios_clinica_id_fkey FOREIGN KEY (clinica_id) REFERENCES public.clinicas(id);
+
+
+--
+-- Name: funcionarios funcionarios_empresa_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.funcionarios
+    ADD CONSTRAINT funcionarios_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas_clientes(id) ON DELETE SET NULL;
+
+
+--
+-- Name: laudos laudos_emissor_cpf_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.laudos
+    ADD CONSTRAINT laudos_emissor_cpf_fkey FOREIGN KEY (emissor_cpf) REFERENCES public.funcionarios(cpf);
+
+
+--
+-- Name: laudos laudos_emissor_cpf_fkey1; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.laudos
+    ADD CONSTRAINT laudos_emissor_cpf_fkey1 FOREIGN KEY (emissor_cpf) REFERENCES public.funcionarios(cpf);
+
+
+--
+-- Name: laudos laudos_lote_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.laudos
+    ADD CONSTRAINT laudos_lote_id_fkey FOREIGN KEY (lote_id) REFERENCES public.lotes_avaliacao(id) ON DELETE CASCADE;
+
+
+--
+-- Name: lotes_avaliacao lotes_avaliacao_clinica_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.lotes_avaliacao
+    ADD CONSTRAINT lotes_avaliacao_clinica_id_fkey FOREIGN KEY (clinica_id) REFERENCES public.clinicas(id) ON DELETE CASCADE;
+
+
+--
+-- Name: lotes_avaliacao lotes_avaliacao_empresa_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.lotes_avaliacao
+    ADD CONSTRAINT lotes_avaliacao_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas_clientes(id) ON DELETE CASCADE;
+
+
+--
+-- Name: lotes_avaliacao lotes_avaliacao_liberado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.lotes_avaliacao
+    ADD CONSTRAINT lotes_avaliacao_liberado_por_fkey FOREIGN KEY (liberado_por) REFERENCES public.funcionarios(cpf);
+
+
+--
+-- Name: lotes_avaliacao lotes_avaliacao_liberado_por_fkey1; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.lotes_avaliacao
+    ADD CONSTRAINT lotes_avaliacao_liberado_por_fkey1 FOREIGN KEY (liberado_por) REFERENCES public.funcionarios(cpf);
+
+
+--
+-- Name: respostas respostas_avaliacao_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.respostas
+    ADD CONSTRAINT respostas_avaliacao_id_fkey FOREIGN KEY (avaliacao_id) REFERENCES public.avaliacoes(id) ON DELETE CASCADE;
+
+
+--
+-- Name: resultados resultados_avaliacao_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.resultados
+    ADD CONSTRAINT resultados_avaliacao_id_fkey FOREIGN KEY (avaliacao_id) REFERENCES public.avaliacoes(id) ON DELETE CASCADE;
+
+
+--
+-- PostgreSQL database dump complete
+--
+

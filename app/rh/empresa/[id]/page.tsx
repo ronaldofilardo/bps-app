@@ -142,19 +142,27 @@ export default function EmpresaDashboardPage() {
     }
   }
 
-  const fetchFuncionarios = async (empresaId?: string) => {
+  // Corrigir busca de funcionários conforme perfil
+  const fetchFuncionarios = async (empresaId?: string, perfil?: string) => {
     try {
-      const funcionariosUrl = empresaId
-        ? `/api/admin/funcionarios?empresa_id=${empresaId}`
-        : '/api/admin/funcionarios'
-
-      const funcionariosRes = await fetch(funcionariosUrl)
+      let funcionariosUrl = '';
+      if (perfil === 'rh') {
+        funcionariosUrl = empresaId
+          ? `/api/rh/funcionarios?empresa_id=${empresaId}`
+          : '/api/rh/funcionarios';
+      } else {
+        funcionariosUrl = empresaId
+          ? `/api/admin/funcionarios?empresa_id=${empresaId}`
+          : '/api/admin/funcionarios';
+      }
+      const funcionariosRes = await fetch(funcionariosUrl);
       if (funcionariosRes.ok) {
-        const funcionariosData = await funcionariosRes.json()
-        setFuncionarios(funcionariosData.funcionarios || [])
+        const funcionariosData = await funcionariosRes.json();
+        // Suporta tanto array direto quanto objeto com .funcionarios
+        setFuncionarios(funcionariosData.funcionarios || funcionariosData || []);
       }
     } catch (error) {
-      console.error('Erro ao carregar funcionários:', error)
+      console.error('Erro ao carregar funcionários:', error);
     }
   }
 
@@ -232,8 +240,8 @@ export default function EmpresaDashboardPage() {
       const dashboardData = await dashboardRes.json()
       setData(dashboardData)
 
-      // Carregar funcionários da empresa
-      await fetchFuncionarios(empresaId)
+      // Carregar funcionários da empresa usando o perfil correto
+      await fetchFuncionarios(empresaId, sessionData.perfil)
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
     } finally {
@@ -469,8 +477,12 @@ export default function EmpresaDashboardPage() {
         // Reset file input
         const fileInput = document.getElementById('csv-upload') as HTMLInputElement
         if (fileInput) fileInput.value = ''
-        // Recarregar lista de funcionários
-        fetchFuncionarios(empresaId)
+        // Recarregar lista de funcionários usando o perfil correto
+        if (session) {
+          fetchFuncionarios(empresaId, session.perfil)
+        } else {
+          fetchFuncionarios(empresaId)
+        }
       } else {
         alert('Erro na importação: ' + result.error)
       }
