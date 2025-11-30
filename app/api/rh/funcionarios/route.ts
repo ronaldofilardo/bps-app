@@ -1,3 +1,39 @@
+export async function GET(request: Request) {
+  try {
+    // Extrair empresa_id da query
+    const { searchParams } = new URL(request.url);
+    const empresaId = searchParams.get('empresa_id');
+    if (!empresaId) {
+      return NextResponse.json({ error: 'empresa_id é obrigatório' }, { status: 400 });
+    }
+
+    // Validar acesso do RH à empresa
+    const session = await requireRHWithEmpresaAccess(Number(empresaId));
+    // Obter clínica do RH
+    const rhResult = await query(
+      'SELECT clinica_id FROM funcionarios WHERE cpf = $1',
+      [session.cpf]
+    );
+    if (rhResult.rows.length === 0) {
+      return NextResponse.json({ error: 'Gestor RH não encontrado' }, { status: 404 });
+    }
+    const clinicaId = rhResult.rows[0].clinica_id;
+
+    // Buscar funcionários ativos e inativos da empresa e clínica
+    const result = await query(
+      `SELECT cpf, nome, setor, funcao, email, matricula, nivel_cargo, turno, escala, ativo
+       FROM funcionarios
+       WHERE empresa_id = $1 AND clinica_id = $2
+       ORDER BY nome`,
+      [empresaId, clinicaId]
+    );
+
+    return NextResponse.json({ funcionarios: result.rows });
+  } catch (error) {
+    console.error('Erro ao listar funcionários:', error);
+    return NextResponse.json({ error: 'Erro ao listar funcionários' }, { status: 500 });
+  }
+}
 import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRHWithEmpresaAccess } from '@/lib/session'
