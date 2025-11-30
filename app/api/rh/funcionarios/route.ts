@@ -30,7 +30,14 @@ export async function GET(request: Request) {
 
     // Buscar avaliações de todos os funcionários da empresa/lote
     const funcionariosCpfs = funcionariosResult.rows.map(f => f.cpf);
-    let avaliacoesMap = {};
+    type AvaliacaoFuncionario = {
+      id: number;
+      inicio: string;
+      envio: string | null;
+      status: string;
+      lote_id?: number;
+    };
+    const avaliacoesMap: Record<string, AvaliacaoFuncionario[]> = {};
     if (funcionariosCpfs.length > 0) {
       const avaliacoesResult = await query(
         `SELECT id, funcionario_cpf, inicio, envio, status, lote_id
@@ -38,24 +45,24 @@ export async function GET(request: Request) {
          WHERE funcionario_cpf = ANY($1)`,
         [funcionariosCpfs]
       );
-      // Agrupar avaliações por cpf
-      avaliacoesMap = avaliacoesResult.rows.reduce((acc, av) => {
-        if (!acc[av.funcionario_cpf]) acc[av.funcionario_cpf] = [];
-        acc[av.funcionario_cpf].push({
+      // Agrupar avaliações por cpf (convertendo para string)
+      avaliacoesResult.rows.forEach(av => {
+        const cpfStr = String(av.funcionario_cpf).trim();
+        if (!avaliacoesMap[cpfStr]) avaliacoesMap[cpfStr] = [];
+        avaliacoesMap[cpfStr].push({
           id: av.id,
           inicio: av.inicio,
           envio: av.envio,
           status: av.status,
           lote_id: av.lote_id
         });
-        return acc;
-      }, {});
+      });
     }
 
     // Montar resposta incluindo avaliações
     const funcionarios = funcionariosResult.rows.map(f => ({
       ...f,
-      avaliacoes: avaliacoesMap[f.cpf] || []
+      avaliacoes: avaliacoesMap[String(f.cpf).trim()] || []
     }));
 
     return NextResponse.json({ funcionarios });
