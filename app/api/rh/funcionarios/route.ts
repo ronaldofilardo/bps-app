@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     const clinicaId = rhResult.rows[0].clinica_id;
 
     // Buscar funcionários ativos e inativos da empresa e clínica
-    const result = await query(
+    const funcionariosResult = await query(
       `SELECT cpf, nome, setor, funcao, email, matricula, nivel_cargo, turno, escala, ativo
        FROM funcionarios
        WHERE empresa_id = $1 AND clinica_id = $2
@@ -28,7 +28,37 @@ export async function GET(request: Request) {
       [empresaId, clinicaId]
     );
 
-    return NextResponse.json({ funcionarios: result.rows });
+    // Buscar avaliações de todos os funcionários da empresa/lote
+    const funcionariosCpfs = funcionariosResult.rows.map(f => f.cpf);
+    let avaliacoesMap = {};
+    if (funcionariosCpfs.length > 0) {
+      const avaliacoesResult = await query(
+        `SELECT id, funcionario_cpf, inicio, envio, status, lote_id
+         FROM avaliacoes
+         WHERE funcionario_cpf = ANY($1)`,
+        [funcionariosCpfs]
+      );
+      // Agrupar avaliações por cpf
+      avaliacoesMap = avaliacoesResult.rows.reduce((acc, av) => {
+        if (!acc[av.funcionario_cpf]) acc[av.funcionario_cpf] = [];
+        acc[av.funcionario_cpf].push({
+          id: av.id,
+          inicio: av.inicio,
+          envio: av.envio,
+          status: av.status,
+          lote_id: av.lote_id
+        });
+        return acc;
+      }, {});
+    }
+
+    // Montar resposta incluindo avaliações
+    const funcionarios = funcionariosResult.rows.map(f => ({
+      ...f,
+      avaliacoes: avaliacoesMap[f.cpf] || []
+    }));
+
+    return NextResponse.json({ funcionarios });
   } catch (error) {
     console.error('Erro ao listar funcionários:', error);
     return NextResponse.json({ error: 'Erro ao listar funcionários' }, { status: 500 });
