@@ -5,7 +5,7 @@ import { cookies } from 'next/headers'
 export interface Session {
   cpf: string
   nome: string
-  perfil: 'funcionario' | 'rh' | 'admin' | 'master'
+  perfil: 'funcionario' | 'rh' | 'admin' | 'master' | 'emissor'
   nivelCargo?: 'operacional' | 'gestao'
 }
 
@@ -62,7 +62,7 @@ export async function requireAuth(): Promise<Session> {
 }
 
 // Verificar perfil específico
-export async function requireRole(role: 'rh' | 'admin' | 'master'): Promise<Session> {
+export async function requireRole(role: 'rh' | 'admin' | 'master' | 'emissor'): Promise<Session> {
   const session = await requireAuth()
 
   if (session.perfil !== role && session.perfil !== 'admin' && session.perfil !== 'master') {
@@ -71,5 +71,56 @@ export async function requireRole(role: 'rh' | 'admin' | 'master'): Promise<Sess
   }
 
   console.log(`[DEBUG] requireRole: Acesso autorizado para ${session.cpf} com perfil ${session.perfil}`)
+  return session
+}
+
+// Verificar se usuário tem acesso à empresa específica (RH ou Admin da clínica)
+export async function requireRHWithEmpresaAccess(empresaId: number): Promise<Session> {
+  const session = await requireAuth()
+
+  // Admin/master podem acessar qualquer empresa
+  if (session.perfil === 'admin' || session.perfil === 'master') {
+    console.log(`[DEBUG] requireRHWithEmpresaAccess: Admin/master ${session.cpf} autorizado para empresa ${empresaId}`)
+    return session
+  }
+
+  // RH precisa ter clínica associada à empresa
+  if (session.perfil !== 'rh') {
+    console.log(`[DEBUG] requireRHWithEmpresaAccess: Perfil ${session.perfil} não autorizado`)
+    throw new Error('Apenas gestores RH ou administradores podem acessar empresas')
+  }
+
+  // Verificar se a empresa pertence à clínica do RH
+  const empresaResult = await query(
+    'SELECT clinica_id FROM empresas_clientes WHERE id = $1',
+    [empresaId]
+  )
+
+  if (empresaResult.rows.length === 0) {
+    console.log(`[DEBUG] requireRHWithEmpresaAccess: Empresa ${empresaId} não encontrada`)
+    throw new Error('Empresa não encontrada')
+  }
+
+  const empresaClinicaId = empresaResult.rows[0].clinica_id
+
+  // Obter clínica do RH logado
+  const rhResult = await query(
+    'SELECT clinica_id FROM funcionarios WHERE cpf = $1',
+    [session.cpf]
+  )
+
+  if (rhResult.rows.length === 0) {
+    console.log(`[DEBUG] requireRHWithEmpresaAccess: RH ${session.cpf} não encontrado`)
+    throw new Error('Gestor RH não encontrado')
+  }
+
+  const rhClinicaId = rhResult.rows[0].clinica_id
+
+  if (empresaClinicaId !== rhClinicaId) {
+    console.log(`[DEBUG] requireRHWithEmpresaAccess: RH da clínica ${rhClinicaId} tentou acessar empresa da clínica ${empresaClinicaId}`)
+    throw new Error('Você não tem permissão para acessar esta empresa')
+  }
+
+  console.log(`[DEBUG] requireRHWithEmpresaAccess: Acesso autorizado para RH ${session.cpf} à empresa ${empresaId}`)
   return session
 }

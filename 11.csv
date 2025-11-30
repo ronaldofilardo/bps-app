@@ -1,0 +1,5 @@
+cpf;nome;setor;funcao;email;perfil;matricula;nivel_cargo;turno;escala
+12312312300;Jose;Produção;Soldador;jose.silva@bps.com;funcionario;MAT0051;operacional;Manhã;8x40
+45645645600;Aninha;Administrativo;Assistente;ana.costa@bps.com;funcionario;MAT0061;operacional;Tarde;8x40
+78978978900;Peter;Manutenção;Técnico;pedro.santos@bps.com;funcionario;MAT0071;operacional;Noite;12x36
+32132132100;Getsemani;Engenharia;Engenheira;carla.oliveira@empresa.com;funcionario;MAT0081;gestao;Comercial;8x44

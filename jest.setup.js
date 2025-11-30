@@ -32,13 +32,32 @@ jest.mock("next/navigation", () => ({
   },
 }));
 
+// Mock Next.js headers and cookies
+jest.mock("next/headers", () => ({
+  cookies: jest.fn(() => ({
+    get: jest.fn(),
+    set: jest.fn(),
+    delete: jest.fn(),
+  })),
+}));
+
 // Mock Next.js server components
 jest.mock("next/server", () => ({
-  NextResponse: {
-    json: jest.fn((data, options) => ({
-      status: options?.status || 200,
-      json: () => Promise.resolve(data),
-    })),
+  NextResponse: class MockNextResponse {
+    constructor(body, options) {
+      this._body = body;
+      this.status = options?.status || 200;
+      this.headers = new Map(Object.entries(options?.headers || {}));
+    }
+    static json(data, options) {
+      return new MockNextResponse(JSON.stringify(data), options);
+    }
+    async json() {
+      return JSON.parse(this._body || "{}");
+    }
+    async text() {
+      return this._body || "";
+    }
   },
   NextRequest: class MockNextRequest {
     constructor(url, options) {
@@ -86,3 +105,6 @@ global.fetch = jest.fn();
 
 // Mock environment variables
 process.env.NEXT_PUBLIC_API_URL = "http://localhost:3000";
+
+// Suppress console.error in tests to clean output
+jest.spyOn(console, "error").mockImplementation(() => {});

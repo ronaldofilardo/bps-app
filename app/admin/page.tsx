@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Header from '@/components/Header'
 import GerenciarEmpresas from '@/components/GerenciarEmpresas'
 
 interface Session {
@@ -110,12 +109,23 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header userName={session.nome} userRole={session.perfil} />
       
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-800 mb-2">Administração</h2>
-          <p className="text-gray-600">Gerenciamento de funcionários e empresas clientes</p>
+        {/* Header com botão de sair */}
+        <div className="mb-8 flex justify-between items-center">
+          <div>
+            <h2 className="text-3xl font-bold text-gray-800 mb-2">Administração</h2>
+            <p className="text-gray-600">Gerenciamento de funcionários e empresas clientes</p>
+          </div>
+          <button
+            onClick={async () => {
+              await fetch('/api/auth/logout', { method: 'POST' })
+              router.push('/login')
+            }}
+            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+          >
+            Sair
+          </button>
         </div>
 
         {/* Tabs Navigation */}
@@ -228,9 +238,10 @@ export default function AdminPage() {
                           <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
                             func.perfil === 'admin' ? 'bg-purple-100 text-purple-800' :
                             func.perfil === 'rh' ? 'bg-blue-100 text-blue-800' :
+                            func.perfil === 'emissor' ? 'bg-orange-100 text-orange-800' :
                             'bg-gray-100 text-gray-800'
                           }`}>
-                            {func.perfil.toUpperCase()}
+                            {func.perfil?.toUpperCase() || 'N/A'}
                           </span>
                         </td>
                         <td className="px-6 py-4 text-sm">

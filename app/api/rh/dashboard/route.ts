@@ -14,9 +14,9 @@ const getDashboardData = unstable_cache(
     // Buscar estatísticas gerais apenas da clínica (ou empresa)
     const stats = await query(`
       SELECT
-        COUNT(DISTINCT a.id) as total_avaliacoes,
+        COUNT(DISTINCT CASE WHEN a.status != 'inativada' THEN a.id END) as total_avaliacoes,
         COUNT(DISTINCT CASE WHEN a.status = 'concluida' THEN a.id END) as concluidas,
-        COUNT(DISTINCT a.funcionario_cpf) as funcionarios_avaliados
+        COUNT(DISTINCT CASE WHEN a.status != 'inativada' THEN a.funcionario_cpf END) as funcionarios_avaliados
       FROM avaliacoes a
       JOIN funcionarios f ON a.funcionario_cpf = f.cpf
       WHERE f.clinica_id = $1 ${empresaFilter}

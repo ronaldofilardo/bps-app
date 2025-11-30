@@ -473,11 +473,16 @@ describe('RH Navigation Integration', () => {
       render(<EmpresaDashboardPage />)
 
       await waitFor(() => {
-        expect(screen.getByText('João Silva')).toBeInTheDocument()
+        expect(screen.getByText('Dashboard Indústria Metalúrgica')).toBeInTheDocument()
       })
 
-      // Verifica que o dashboard da empresa foi carregado
-      expect(screen.getByText('Dashboard Indústria Metalúrgica')).toBeInTheDocument()
+      // Clica na aba "Funcionários" para mostrar os dados dos funcionários
+      const funcionariosTab = screen.getByText((content) => content.includes('Funcionários'))
+      fireEvent.click(funcionariosTab)
+
+      await waitFor(() => {
+        expect(screen.getByText('João Silva')).toBeInTheDocument()
+      })
     })
 
     it('deve atualizar contexto ao mudar de empresa', async () => {
@@ -520,6 +525,14 @@ describe('RH Navigation Integration', () => {
       })
 
       render(<EmpresaDashboardPage />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Dashboard Indústria Metalúrgica')).toBeInTheDocument()
+      })
+
+      // Clica na aba "Funcionários" para mostrar os dados dos funcionários
+      const funcionariosTab = screen.getByText((content) => content.includes('Funcionários'))
+      fireEvent.click(funcionariosTab)
 
       await waitFor(() => {
         expect(screen.getByText('João Silva')).toBeInTheDocument()

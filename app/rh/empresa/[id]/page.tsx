@@ -1,8 +1,9 @@
 'use client'
 
+import React from 'react'
 import { useEffect, useState, Fragment } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import Header from '@/components/Header'
+import ModalInserirFuncionario from '@/components/ModalInserirFuncionario'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js'
 import { Bar } from 'react-chartjs-2'
 
@@ -20,18 +21,40 @@ interface Empresa {
   cnpj: string
 }
 
+interface LoteAvaliacao {
+   id: number;
+   codigo: string;
+   titulo: string;
+   tipo: string;
+   liberado_em: string;
+   status: string;
+   total_avaliacoes: number;
+   avaliacoes_concluidas: number;
+   avaliacoes_inativadas: number;
+ }
+
+interface AvaliacaoFuncionario {
+  id: number;
+  inicio: string;
+  envio: string | null;
+  status: string;
+  lote_id?: number;
+  lote_codigo?: string;
+}
+
 interface Funcionario {
-  cpf: string
-  nome: string
-  setor: string
-  funcao: string
-  email: string
-  matricula: string | null
-  nivel_cargo: 'operacional' | 'gestao' | null
-  turno: string | null
-  escala: string | null
-  empresa_nome: string
-  ativo: boolean
+  cpf: string;
+  nome: string;
+  setor: string;
+  funcao: string;
+  email: string;
+  matricula: string | null;
+  nivel_cargo: 'operacional' | 'gestao' | null;
+  turno: string | null;
+  escala: string | null;
+  empresa_nome: string;
+  ativo: boolean;
+  avaliacoes?: AvaliacaoFuncionario[];
 }
 
 interface DashboardData {
@@ -56,6 +79,18 @@ interface DashboardData {
   }>
 }
 
+interface Laudo {
+  id: number
+  lote_id: number
+  codigo: string
+  titulo: string
+  empresa_nome: string
+  clinica_nome: string
+  emissor_nome: string
+  enviado_em: string
+  hash: string
+}
+
 export default function EmpresaDashboardPage() {
   const [session, setSession] = useState<Session | null>(null)
   const [data, setData] = useState<DashboardData | null>(null)
@@ -67,11 +102,29 @@ export default function EmpresaDashboardPage() {
   const router = useRouter()
   const params = useParams()
   const empresaId = params.id as string
+  const [modalFuncionario, setModalFuncionario] = useState<Funcionario | null>(null)
+  const [gerandoRelatorioLote, setGerandoRelatorioLote] = useState<number | null>(null)
+  const [showLiberarLoteModal, setShowLiberarLoteModal] = useState(false)
+  const [tipoLote, setTipoLote] = useState<'completo' | 'operacional' | 'gestao'>('completo')
+  const [tituloLote, setTituloLote] = useState('')
+  const [descricaoLote, setDescricaoLote] = useState('')
+  const [liberandoLote, setLiberandoLote] = useState(false)
+  const [lotesRecentes, setLotesRecentes] = useState<LoteAvaliacao[]>([])
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
+  const [showInserirModal, setShowInserirModal] = useState(false)
+  const [paginaAtual, setPaginaAtual] = useState(1)
+  const [busca, setBusca] = useState('')
+  const funcionariosPorPagina = 20
+  const [activeTab, setActiveTab] = useState<'lotes' | 'funcionarios'>('lotes')
+  const [laudos, setLaudos] = useState<Laudo[]>([])
+  const [downloadingLaudo, setDownloadingLaudo] = useState<number | null>(null)
 
   useEffect(() => {
     const loadEmpresaAndData = async () => {
       await loadEmpresa()
       await fetchData()
+      await fetchLotesRecentes()
+      await fetchLaudos()
     }
     loadEmpresaAndData()
   }, [empresaId])
@@ -102,6 +155,58 @@ export default function EmpresaDashboardPage() {
       }
     } catch (error) {
       console.error('Erro ao carregar funcionários:', error)
+    }
+  }
+
+  const fetchLotesRecentes = async () => {
+    try {
+      const response = await fetch(`/api/rh/lotes?empresa_id=${empresaId}&limit=5`)
+      if (response.ok) {
+        const lotesData = await response.json()
+        setLotesRecentes(lotesData.lotes || [])
+      }
+    } catch (error) {
+      console.error('Erro ao carregar lotes recentes:', error)
+    }
+  }
+
+  const fetchLaudos = async () => {
+    try {
+      const response = await fetch('/api/rh/laudos')
+      if (response.ok) {
+        const laudosData = await response.json()
+        setLaudos(laudosData.laudos || [])
+      }
+    } catch (error) {
+      console.error('Erro ao carregar laudos:', error)
+    }
+  }
+
+  const handleDownloadLaudo = async (laudo: Laudo) => {
+    try {
+      setDownloadingLaudo(laudo.id)
+      const response = await fetch(`/api/rh/laudos/${laudo.id}/download`)
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        alert(`Erro ao baixar laudo: ${errorData.error}`)
+        return
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `laudo-${laudo.codigo}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error('Erro ao fazer download:', error)
+      alert('Erro ao fazer download do laudo')
+    } finally {
+      setDownloadingLaudo(null)
     }
   }
 
@@ -136,35 +241,117 @@ export default function EmpresaDashboardPage() {
     }
   }
 
-  const exportarPDF = () => {
-    // Implementar exportação PDF
-    alert('Exportação PDF em desenvolvimento')
-  }
-
-  const exportarExcel = () => {
-    // Implementar exportação Excel
-    alert('Exportação Excel em desenvolvimento')
-  }
 
 
-  const liberarPorNivel = async (nivel: 'operacional' | 'gestao') => {
+  const gerarRelatorioLote = async (loteId: number, loteCodigo: string) => {
+    if (!confirm(`Gerar relatório PDF do lote ${loteCodigo}?`)) return
+
+    setGerandoRelatorioLote(loteId)
     try {
-      const response = await fetch('/api/rh/liberar-por-nivel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nivelCargo: nivel, empresaId: parseInt(empresaId) }),
-      })
+      const response = await fetch(`/api/avaliacao/relatorio-impressao?lote_id=${loteId}&empresa_id=${empresaId}&formato=pdf`)
 
       if (response.ok) {
-        const result = await response.json()
-        alert(`${result.message}\n✅ Criadas: ${result.avaliacoesCreated}\n⚠️ Já existiam: ${result.avaliacoesExistentes}\n📊 Total funcionários: ${result.totalFuncionarios}`)
-        fetchData()
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `relatorio-avaliacoes-${empresa?.nome || 'empresa'}-lote-${loteCodigo}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
       } else {
         const error = await response.json()
-        alert('Erro: ' + error.error)
+        alert('Erro ao gerar relatório: ' + error.error)
       }
     } catch (error) {
-      alert('Erro ao liberar avaliações')
+      alert('Erro ao gerar relatório: ' + error)
+    } finally {
+      setGerandoRelatorioLote(null)
+    }
+  }
+
+  // Filtrar funcionários baseado na busca (incluindo inativos)
+  const funcionariosFiltrados = funcionarios.filter(func =>
+    func.nome.toLowerCase().includes(busca.toLowerCase()) ||
+    func.cpf.includes(busca) ||
+    func.setor.toLowerCase().includes(busca.toLowerCase()) ||
+    func.funcao.toLowerCase().includes(busca.toLowerCase())
+  )
+
+  // Calcular paginação
+  const totalPaginas = Math.ceil(funcionariosFiltrados.length / funcionariosPorPagina)
+  const inicioIndex = (paginaAtual - 1) * funcionariosPorPagina
+  const funcionariosPaginados = funcionariosFiltrados.slice(inicioIndex, inicioIndex + funcionariosPorPagina)
+
+  const atualizarStatusFuncionario = async (cpf: string, novoStatus: boolean) => {
+    const acao = novoStatus ? 'ativar' : 'desativar'
+    const confirmacao = novoStatus
+      ? 'Tem certeza que deseja ativar este funcionário?'
+      : 'Tem certeza que deseja desativar este funcionário? Isso marcará todas as suas avaliações como inativadas e elas não aparecerão nos relatórios.'
+
+    if (!confirm(confirmacao)) return
+
+    setUpdatingStatus(cpf)
+    try {
+      const response = await fetch('/api/rh/funcionarios/status', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cpf, ativo: novoStatus })
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        alert(result.message)
+        // Recarregar funcionários
+        await fetchFuncionarios(empresaId)
+      } else {
+        alert('Erro: ' + (result.error || 'Erro desconhecido'))
+      }
+    } catch (error) {
+      alert('Erro ao atualizar status: ' + error)
+    } finally {
+      setUpdatingStatus(null)
+    }
+  }
+
+  const liberarLote = async () => {
+    if (!tituloLote.trim()) {
+      alert('Digite um título para o lote')
+      return
+    }
+
+    setLiberandoLote(true)
+    try {
+      const response = await fetch('/api/rh/liberar-lote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          empresaId: parseInt(empresaId),
+          titulo: tituloLote.trim(),
+          descricao: descricaoLote.trim(),
+          tipo: tipoLote
+        }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        alert(`${result.message}\n✅ Avaliações criadas: ${result.estatisticas.avaliacoesCriadas}\n👥 Total funcionários: ${result.estatisticas.totalFuncionarios}`)
+        setShowLiberarLoteModal(false)
+        setTituloLote('')
+        setDescricaoLote('')
+        setTipoLote('completo')
+        fetchData()
+        fetchLotesRecentes()
+      } else {
+        alert('Erro: ' + (result.error || 'Erro desconhecido'))
+      }
+    } catch (error) {
+      alert('Erro ao liberar lote de avaliações')
+    } finally {
+      setLiberandoLote(false)
     }
   }
 
@@ -189,38 +376,101 @@ export default function EmpresaDashboardPage() {
     try {
       const text = await uploadFile.text()
       const lines = text.split('\n').filter(line => line.trim())
-      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
 
-      const expectedHeaders = ['cpf', 'nome', 'setor', 'funcao', 'email', 'perfil', 'empresa_id', 'matricula', 'nivel_cargo', 'turno', 'escala']
-      const missingHeaders = expectedHeaders.filter(h => !headers.includes(h))
-
-      if (missingHeaders.length > 0) {
-        alert(`Cabeçalhos obrigatórios faltando: ${missingHeaders.join(', ')}`)
+      if (lines.length === 0) {
+        alert('Arquivo CSV está vazio')
         return
       }
 
-      const funcionarios = lines.slice(1).map(line => {
-        const values = line.split(',').map(v => v.trim().replace(/"/g, ''))
+      // Detectar separador automaticamente (vírgula ou ponto e vírgula)
+      const firstLine = lines[0]
+      const commaCount = (firstLine.match(/,/g) || []).length
+      const semicolonCount = (firstLine.match(/;/g) || []).length
+      const separator = commaCount >= semicolonCount ? ',' : ';'
+
+      const headers = firstLine.split(separator).map(h => h.trim().replace(/"/g, ''))
+
+      const expectedHeaders = ['cpf', 'nome', 'setor', 'funcao', 'email', 'perfil', 'matricula', 'nivel_cargo', 'turno', 'escala']
+      const missingHeaders = expectedHeaders.filter(h => !headers.includes(h))
+
+      if (missingHeaders.length > 0) {
+        alert(`Cabeçalhos obrigatórios faltando: ${missingHeaders.join(', ')}\n\nCabeçalhos esperados: ${expectedHeaders.join(', ')}\n\nSeparador detectado: ${separator === ',' ? 'vírgula' : 'ponto e vírgula'}`)
+        return
+      }
+
+      // Validar se há dados
+      if (lines.length <= 1) {
+        alert('Arquivo CSV não contém dados de funcionários')
+        return
+      }
+
+      const funcionarios = []
+      const erros: string[] = []
+
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim()
+        if (!line) continue
+
+        const values = line.split(separator).map(v => v.trim().replace(/"/g, ''))
         const func: any = {}
+
+        // Mapear valores aos headers
         headers.forEach((header, index) => {
           func[header] = values[index] || null
         })
-        return func
-      })
+
+        // Validações básicas por linha
+        if (!func.cpf || func.cpf.length !== 11 || !/^\d{11}$/.test(func.cpf)) {
+          erros.push(`Linha ${i + 1}: CPF inválido (${func.cpf})`)
+          continue
+        }
+
+        if (!func.nome || func.nome.trim().length < 2) {
+          erros.push(`Linha ${i + 1}: Nome muito curto (${func.nome})`)
+          continue
+        }
+
+        if (!func.email || !func.email.includes('@')) {
+          erros.push(`Linha ${i + 1}: Email inválido (${func.email})`)
+          continue
+        }
+
+        // Forçar empresa_id para a empresa atual
+        func.empresa_id = empresaId
+
+        funcionarios.push(func)
+      }
+
+      if (erros.length > 0) {
+        alert(`Erros encontrados:\n\n${erros.slice(0, 5).join('\n')}${erros.length > 5 ? `\n... e mais ${erros.length - 5} erros` : ''}`)
+        return
+      }
+
+      if (funcionarios.length === 0) {
+        alert('Nenhum funcionário válido encontrado no arquivo')
+        return
+      }
 
       const response = await fetch('/api/admin/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ funcionarios }),
+        body: JSON.stringify({ funcionarios, empresa_id: empresaId }),
       })
 
       const result = await response.json()
       if (response.ok) {
-        alert(`Importação concluída!\n✅ Sucessos: ${result.sucesso}\n❌ Erros: ${result.erros}`)
+        const mensagem = `Importação concluída!\n✅ Sucessos: ${result.sucesso}\n❌ Erros: ${result.erros}`
+        if (result.erros > 0) {
+          alert(`${mensagem}\n\nNota: Funcionários com CPF já existente foram atualizados.`)
+        } else {
+          alert(mensagem)
+        }
         setUploadFile(null)
         // Reset file input
         const fileInput = document.getElementById('csv-upload') as HTMLInputElement
         if (fileInput) fileInput.value = ''
+        // Recarregar lista de funcionários
+        fetchFuncionarios(empresaId)
       } else {
         alert('Erro na importação: ' + result.error)
       }
@@ -230,14 +480,43 @@ export default function EmpresaDashboardPage() {
       setUploading(false)
     }
   }
-
+  const AvaliacoesModal = ({ funcionario, onClose }: { funcionario: Funcionario, onClose: () => void }) => {
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg shadow-lg p-6 min-w-[320px] max-w-[90vw]">
+          <h2 className="text-lg font-bold mb-2">Avaliações de {funcionario.nome}</h2>
+          <table className="w-full text-xs mb-4">
+            <thead>
+              <tr>
+                <th className="px-2 py-1">ID</th>
+                <th className="px-2 py-1">Liberação</th>
+                <th className="px-2 py-1">Conclusão</th>
+                <th className="px-2 py-1">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {funcionario.avaliacoes?.map(av => (
+                <tr key={av.id}>
+                  <td className="px-2 py-1">{av.id}</td>
+                  <td className="px-2 py-1">{av.inicio ? new Date(av.inicio).toLocaleString('pt-BR') : '-'}</td>
+                  <td className="px-2 py-1">{av.envio ? new Date(av.envio).toLocaleString('pt-BR') : '-'}</td>
+                  <td className="px-2 py-1">{av.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button className="px-4 py-2 bg-blue-600 text-white rounded" onClick={onClose}>Fechar</button>
+        </div>
+      </div>
+    );
+  };
 
   if (loading || !session || !data || !data.resultados || !data.stats) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div role="status" className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
-    )
+    );
   }
 
   // Dados para gráfico de barras
@@ -250,13 +529,12 @@ export default function EmpresaDashboardPage() {
       borderColor: 'rgb(255, 107, 0)',
       borderWidth: 1,
     }],
-  }
-
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="container mx-auto px-4 py-6">
-        {/* Header compacto */}
+        {/* Header compacto com botão sair */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
             <div className="flex items-center gap-3 mb-2">
@@ -270,102 +548,221 @@ export default function EmpresaDashboardPage() {
             </div>
             <p className="text-sm text-gray-600">Análise das avaliações psicossociais</p>
           </div>
+          <button
+            onClick={async () => {
+              await fetch('/api/auth/logout', { method: 'POST' })
+              router.push('/login')
+            }}
+            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
+          >
+            Sair
+          </button>
+        </div>
 
-          {/* Cards de estatísticas compactos no header */}
-          <div className="flex gap-4">
-            <div className="bg-white rounded-lg shadow-sm p-3 text-center min-w-[80px]">
-              <div className="text-lg font-bold text-primary">{data.stats.total_avaliacoes}</div>
-              <div className="text-xs text-gray-600">Avaliações</div>
-            </div>
-            <div className="bg-white rounded-lg shadow-sm p-3 text-center min-w-[80px]">
-              <div className="text-lg font-bold text-success">{data.stats.concluidas}</div>
-              <div className="text-xs text-gray-600">Concluídas</div>
-            </div>
-            <div className="bg-white rounded-lg shadow-sm p-3 text-center min-w-[80px]">
-              <div className="text-lg font-bold text-gray-800">{data.stats.funcionarios_avaliados}</div>
-              <div className="text-xs text-gray-600">Avaliados</div>
-            </div>
+        {/* Cards de estatísticas compactos no header */}
+        <div className="flex gap-4 mb-6">
+          <div className="bg-white rounded-lg shadow-sm p-3 text-center min-w-[80px]">
+            <div className="text-lg font-bold text-primary">{data.stats.total_avaliacoes}</div>
+            <div className="text-xs text-gray-600">Avaliações</div>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm p-3 text-center min-w-[80px]">
+            <div className="text-lg font-bold text-success">{data.stats.concluidas}</div>
+            <div className="text-xs text-gray-600">Concluídas</div>
+          </div>
+          <div className="bg-white rounded-lg shadow-sm p-3 text-center min-w-[80px]">
+            <div className="text-lg font-bold text-gray-800">{data.stats.funcionarios_avaliados}</div>
+            <div className="text-xs text-gray-600">Avaliados</div>
           </div>
         </div>
 
-        {/* Layout principal com sidebar */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Sidebar com ações */}
-          <div className="lg:col-span-1 space-y-4">
-            {/* Liberação por nível */}
-            <div className="bg-white rounded-lg shadow-sm p-4">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">🎯 Liberar Avaliações</h3>
-              <div className="space-y-2">
-                <button
-                  onClick={() => liberarPorNivel('operacional')}
-                  className="w-full bg-blue-600 text-white px-3 py-2 rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
-                >
-                  🔧 Operacionais
-                </button>
-                <button
-                  onClick={() => liberarPorNivel('gestao')}
-                  className="w-full bg-purple-600 text-white px-3 py-2 rounded-md hover:bg-purple-700 transition-colors text-sm font-medium"
-                >
-                  👔 Gestão
-                </button>
-              </div>
-            </div>
+        {/* Abas */}
+        <div className="mb-6">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setActiveTab('lotes')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'lotes'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                📋 Lotes de avaliações
+              </button>
+              <button
+                onClick={() => setActiveTab('funcionarios')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'funcionarios'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                👥 Funcionários
+              </button>
+            </nav>
+          </div>
+        </div>
 
-            {/* Upload de funcionários */}
-            <div className="bg-white rounded-lg shadow-sm p-4">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">📤 Importar Funcionários</h3>
-              <div className="space-y-3">
-                <input
-                  id="csv-upload"
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileChange}
-                  className="block w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-primary file:text-white hover:file:bg-orange-600"
-                />
+        {/* Conteúdo das abas */}
+        {activeTab === 'lotes' && (
+          <div className="space-y-6">
+            {/* Área única de Lotes e Laudos */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-lg font-semibold text-gray-800">📋 Lotes de Avaliações</h3>
                 <button
-                  onClick={handleUpload}
-                  disabled={!uploadFile || uploading}
-                  className="w-full bg-green-600 text-white px-3 py-2 rounded-md hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
+                  onClick={() => setShowLiberarLoteModal(true)}
+                  className="bg-primary text-white px-4 py-2 rounded-md hover:bg-orange-600 transition-colors text-sm font-medium"
                 >
-                  {uploading ? '🔄...' : '📤 Importar'}
+                  🚀 Liberar Novo Lote
                 </button>
-                <a
-                  href="/modelo-funcionarios.csv"
-                  download
-                  className="block w-full bg-blue-600 text-white px-3 py-2 rounded-md hover:bg-blue-700 transition-colors text-center text-sm"
-                >
-                  📋 Modelo CSV
-                </a>
               </div>
-            </div>
 
-            {/* Exportações */}
-            <div className="bg-white rounded-lg shadow-sm p-4">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">📊 Exportar</h3>
-              <div className="space-y-2">
-                <button
-                  onClick={exportarPDF}
-                  className="w-full bg-red-600 text-white px-3 py-2 rounded-md hover:bg-red-700 transition-colors text-sm"
-                >
-                  📄 PDF
-                </button>
-                <button
-                  onClick={exportarExcel}
-                  className="w-full bg-green-600 text-white px-3 py-2 rounded-md hover:bg-green-700 transition-colors text-sm"
-                >
-                  📊 Excel
-                </button>
-              </div>
+              {lotesRecentes.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {lotesRecentes.map((lote) => {
+                    const isPronto = lote.avaliacoes_concluidas === (lote.total_avaliacoes - lote.avaliacoes_inativadas)
+                    const laudoAssociado = laudos.find(l => l.lote_id === lote.id)
+                    return (
+                      <div key={lote.id} className="bg-gray-50 rounded-lg p-5 border border-gray-200 hover:shadow-md transition-shadow">
+                        <div className="mb-4">
+                          <h5 className="font-semibold text-gray-800 text-base mb-1">{lote.titulo}</h5>
+                          <p className="text-sm text-gray-600">Código: {lote.codigo}</p>
+                          <p className="text-xs text-gray-500">Liberado em {new Date(lote.liberado_em).toLocaleDateString('pt-BR')} às {new Date(lote.liberado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+                        </div>
+
+                        <div className="space-y-2 mb-4">
+                          <div className="flex justify-between text-sm">
+                            <span>Avaliações liberadas:</span>
+                            <span className="font-medium">{lote.total_avaliacoes}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span>Concluídas:</span>
+                            <span className="font-medium text-green-600">{lote.avaliacoes_concluidas}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span>Inativadas:</span>
+                            <span className="font-medium text-red-600">{lote.avaliacoes_inativadas}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span>Status relatório:</span>
+                            <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                              isPronto ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {isPronto ? 'Pronto' : 'Pendente'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => gerarRelatorioLote(lote.id, lote.codigo)}
+                          disabled={!isPronto || gerandoRelatorioLote === lote.id}
+                          className="w-full bg-green-600 text-white px-3 py-2 rounded text-sm hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed mb-4"
+                        >
+                          {gerandoRelatorioLote === lote.id ? 'Gerando...' : '📊 Gerar Relatório PDF'}
+                        </button>
+
+                        {/* Laudo associado */}
+                        {laudoAssociado && (
+                          <div className="p-3 bg-blue-50 rounded border border-blue-200">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-medium text-blue-800">📄 Laudo disponível</span>
+                              <span className="text-xs text-blue-600">
+                                {new Date(laudoAssociado.enviado_em).toLocaleDateString('pt-BR')} às {new Date(laudoAssociado.enviado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <p className="text-xs text-blue-700 mb-2">Emissor: {laudoAssociado.emissor_nome}</p>
+                            <button
+                              onClick={() => handleDownloadLaudo(laudoAssociado)}
+                              disabled={downloadingLaudo === laudoAssociado.id}
+                              className="w-full bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                            >
+                              {downloadingLaudo === laudoAssociado.id ? 'Baixando...' : '📥 Baixar Laudo PDF'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4">📋</div>
+                  <h4 className="text-xl font-semibold text-gray-600 mb-2">Nenhum lote encontrado</h4>
+                  <p className="text-gray-500">Libere um novo lote de avaliações para começar.</p>
+                </div>
+              )}
             </div>
           </div>
+        )}
 
-          {/* Conteúdo principal */}
-          <div className="lg:col-span-3 space-y-6">
+        {activeTab === 'funcionarios' && (
+          <div className="space-y-6">
+            {/* Gerenciamento de funcionários */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">👥 Gerenciar Funcionários</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Inserir Individual */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-gray-700">Inserir Individual</h4>
+                  <button
+                    onClick={() => setShowInserirModal(true)}
+                    className="w-full bg-blue-600 text-white px-4 py-3 rounded-md hover:bg-blue-700 transition-colors text-sm font-medium"
+                  >
+                    ➕ Inserir Funcionário
+                  </button>
+                </div>
 
-            {/* Lista de Funcionários - Compacta */}
+                {/* Upload CSV */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-gray-700">Importar Múltiplos (CSV)</h4>
+                  <input
+                    id="csv-upload"
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileChange}
+                    className="block w-full text-sm text-gray-500 file:mr-2 file:py-2 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary file:text-white hover:file:bg-orange-600"
+                  />
+                  <button
+                    onClick={handleUpload}
+                    disabled={!uploadFile || uploading}
+                    className="w-full mt-2 bg-green-600 text-white px-4 py-3 rounded-md hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed text-sm"
+                  >
+                    {uploading ? '🔄 Importando...' : '📤 Importar CSV'}
+                  </button>
+                  <a
+                    href="/modelo-funcionarios.csv"
+                    download
+                    className="block w-full mt-2 bg-gray-600 text-white px-4 py-3 rounded-md hover:bg-gray-700 transition-colors text-center text-sm"
+                  >
+                    📋 Baixar Modelo CSV
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* Lista de Funcionários */}
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <div className="p-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-800">👥 Funcionários ({funcionarios.length})</h3>
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    👥 Funcionários ({funcionariosFiltrados.length}{busca && ` encontrados de ${funcionarios.length} total`})
+                  </h3>
+
+                  {/* Busca */}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Buscar por nome, CPF, setor..."
+                      value={busca}
+                      onChange={(e) => {
+                        setBusca(e.target.value)
+                        setPaginaAtual(1) // Reset para primeira página
+                      }}
+                      className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -375,34 +772,97 @@ export default function EmpresaDashboardPage() {
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Setor</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Função</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Lote</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Avaliação</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Liberação</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Conclusão</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {funcionarios.slice(0, 10).map((func, idx) => (
+                    {funcionariosPaginados.map((func, idx) => (
                       <tr key={idx} className="hover:bg-gray-50">
                         <td className="px-3 py-2 text-sm text-gray-900 font-mono">{func.cpf}</td>
                         <td className="px-3 py-2 text-sm text-gray-900">{func.nome}</td>
                         <td className="px-3 py-2 text-sm text-gray-900">{func.setor}</td>
                         <td className="px-3 py-2 text-sm text-gray-900">{func.funcao}</td>
+                        <td className="px-3 py-2 text-sm text-center">
+                          <input
+                            type="checkbox"
+                            checked={func.ativo}
+                            disabled={updatingStatus === func.cpf}
+                            onChange={(e) => atualizarStatusFuncionario(func.cpf, e.target.checked)}
+                            className="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary focus:ring-2"
+                          />
+                        </td>
                         <td className="px-3 py-2 text-sm">
                           <span className={`px-2 py-1 text-xs rounded-full ${func.ativo ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                             {func.ativo ? 'Ativo' : 'Inativo'}
                           </span>
                         </td>
+                        <td className="px-3 py-2 text-sm text-gray-900">
+                          {func.avaliacoes && func.avaliacoes.length > 0 ? func.avaliacoes[0].lote_codigo : '-'}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-900">
+                          {func.avaliacoes && func.avaliacoes.length > 0 ? func.avaliacoes[0].id : '-'}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-900">
+                          {func.avaliacoes && func.avaliacoes.length > 0 ? (
+                            <>
+                              {new Date(func.avaliacoes[0].inicio).toLocaleDateString('pt-BR')} às {new Date(func.avaliacoes[0].inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                              {func.avaliacoes.length > 1 && (
+                                <button
+                                  className="ml-2 text-blue-600 underline text-xs"
+                                  onClick={() => setModalFuncionario(func)}
+                                  title="Ver todas as liberações"
+                                >
+                                  Ver todas
+                                </button>
+                              )}
+                            </>
+                          ) : '-'}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-900">
+                          {func.avaliacoes && func.avaliacoes.length > 0 && func.avaliacoes[0].envio ? `${new Date(func.avaliacoes[0].envio).toLocaleDateString('pt-BR')} às ${new Date(func.avaliacoes[0].envio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : '-'}
+                        </td>
                       </tr>
                     ))}
-                    {funcionarios.length === 0 && (
+
+                    {funcionariosFiltrados.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-3 py-4 text-center text-sm text-gray-500">
-                          Nenhum funcionário encontrado
+                        <td colSpan={10} className="px-3 py-4 text-center text-sm text-gray-500">
+                          {busca ? 'Nenhum funcionário encontrado para a busca' : 'Nenhum funcionário encontrado'}
                         </td>
                       </tr>
                     )}
-                    {funcionarios.length > 10 && (
+
+                    {/* Controles de paginação */}
+                    {totalPaginas > 1 && (
                       <tr>
-                        <td colSpan={5} className="px-3 py-2 text-center text-sm text-gray-600 bg-gray-50">
-                          ... e mais {funcionarios.length - 10} funcionários
+                        <td colSpan={10} className="px-3 py-3 text-center bg-gray-50">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => setPaginaAtual(Math.max(1, paginaAtual - 1))}
+                              disabled={paginaAtual === 1}
+                              className="px-3 py-1 text-sm bg-white border border-gray-300 rounded disabled:bg-gray-100 disabled:text-gray-400"
+                            >
+                              ← Anterior
+                            </button>
+
+                            <span className="text-sm text-gray-600">
+                              Página {paginaAtual} de {totalPaginas}
+                              ({funcionariosFiltrados.length} funcionários)
+                            </span>
+
+                            <button
+                              onClick={() => setPaginaAtual(Math.min(totalPaginas, paginaAtual + 1))}
+                              disabled={paginaAtual === totalPaginas}
+                              className="px-3 py-1 text-sm bg-white border border-gray-300 rounded disabled:bg-gray-100 disabled:text-gray-400"
+                            >
+                              Próxima →
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )}
@@ -410,78 +870,106 @@ export default function EmpresaDashboardPage() {
                 </table>
               </div>
             </div>
+          </div>
+        )}
+      </main>
+      {modalFuncionario && <AvaliacoesModal funcionario={modalFuncionario} onClose={() => setModalFuncionario(null)} />}
 
-            {/* Gráfico e tabela lado a lado */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              {/* Gráfico */}
-              <div className="bg-white rounded-lg shadow-sm p-4">
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">📊 Scores por Domínio</h3>
-                <div className="h-64">
-                  <Bar
-                    data={barData}
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      scales: {
-                        y: { beginAtZero: true, max: 100, ticks: { font: { size: 11 } } },
-                        x: { ticks: { font: { size: 10 } } }
-                      },
-                      plugins: {
-                        legend: { display: false }
-                      }
-                    }}
+
+      {/* Modal Liberar Lote */}
+      {showLiberarLoteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full">
+            <div className="p-6">
+              <h2 className="text-lg font-bold mb-4">🚀 Liberar Lote de Avaliações</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Crie um novo lote de avaliações para <strong>{empresa?.nome}</strong>.
+                Todas as avaliações ficarão vinculadas a este lote.
+              </p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tipo de Lote
+                  </label>
+                  <select
+                    value={tipoLote}
+                    onChange={(e) => setTipoLote(e.target.value as 'completo' | 'operacional' | 'gestao')}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="completo">Completo (Todos os funcionários)</option>
+                    <option value="operacional">Apenas Operacionais</option>
+                    <option value="gestao">Apenas Gestão</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Título do Lote *
+                  </label>
+                  <input
+                    type="text"
+                    value={tituloLote}
+                    onChange={(e) => setTituloLote(e.target.value)}
+                    placeholder="Ex: Avaliação Trimestral Q4 2025"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    maxLength={100}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Descrição (Opcional)
+                  </label>
+                  <textarea
+                    value={descricaoLote}
+                    onChange={(e) => setDescricaoLote(e.target.value)}
+                    placeholder="Descrição adicional sobre este lote..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={3}
+                    maxLength={500}
                   />
                 </div>
               </div>
 
-              {/* Tabela detalhada compacta */}
-              <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-gray-200">
-                  <h3 className="text-lg font-semibold text-gray-800">📋 Detalhamento por Domínio</h3>
-                </div>
-                <div className="overflow-x-auto max-h-64">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 sticky top-0">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Domínio</th>
-                        <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Score</th>
-                        <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Distribuição</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {data.resultados.slice(0, 6).map((r, idx) => (
-                        <tr key={idx} className="hover:bg-gray-50">
-                          <td className="px-3 py-2 text-sm text-gray-900">
-                            <div className="font-medium">{r.dominio.substring(0, 20)}{r.dominio.length > 20 ? '...' : ''}</div>
-                            <div className="text-xs text-gray-500">Grupo {r.grupo}</div>
-                          </td>
-                          <td className="px-3 py-2 text-center text-sm font-semibold text-primary">
-                            {Number(r.media_score).toFixed(1)}
-                          </td>
-                          <td className="px-3 py-2 text-center text-sm">
-                            <div className="flex justify-center space-x-1">
-                              <span className="px-1 py-0.5 bg-red-100 text-red-800 text-xs rounded">B:{r.baixo}</span>
-                              <span className="px-1 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded">M:{r.medio}</span>
-                              <span className="px-1 py-0.5 bg-green-100 text-green-800 text-xs rounded">A:{r.alto}</span>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {data.resultados.length > 6 && (
-                        <tr>
-                          <td colSpan={3} className="px-3 py-2 text-center text-sm text-gray-600 bg-gray-50">
-                            ... e mais {data.resultados.length - 6} domínios
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={liberarLote}
+                  disabled={!tituloLote.trim() || liberandoLote}
+                  className="flex-1 bg-primary text-white px-4 py-2 rounded-md hover:bg-orange-600 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {liberandoLote ? '🔄 Liberando...' : '🚀 Liberar Lote'}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowLiberarLoteModal(false)
+                    setTituloLote('')
+                    setDescricaoLote('')
+                    setTipoLote('completo')
+                  }}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 transition-colors"
+                  disabled={liberandoLote}
+                >
+                  Cancelar
+                </button>
               </div>
             </div>
           </div>
         </div>
-      </main>
+      )}
+
+      {/* Modal Inserir Funcionário */}
+      {showInserirModal && empresa && (
+        <ModalInserirFuncionario
+          empresaId={parseInt(empresaId)}
+          empresaNome={empresa.nome}
+          onClose={() => setShowInserirModal(false)}
+          onSuccess={() => {
+            fetchFuncionarios(empresaId) // Recarregar lista
+            setShowInserirModal(false)
+          }}
+        />
+      )}
     </div>
   )
 }

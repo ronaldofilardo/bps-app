@@ -2,7 +2,7 @@
  * Testes para interface de popup da avaliação
  * Item 11: Popup exibe uma questão por tela
  * Item 12: Não exibe números 0, ¼, ½, ¾, 100
- * Item 13: Barra mostra "X de 70" e atualiza em tempo real
+ * Item 13: Barra mostra "X de 37" e atualiza em tempo real
  * Item 14: Próxima questão aparece automaticamente
  */
 
@@ -193,8 +193,8 @@ describe('Avaliação - Interface Popup', () => {
     })
   })
 
-  describe('Item 13: Barra mostra "X de 70" e atualiza em tempo real', () => {
-    it('deve exibir progresso no formato "X de 70"', async () => {
+  describe('Item 13: Barra mostra "X de 37" e atualiza em tempo real', () => {
+    it('deve exibir progresso no formato "X de 37"', async () => {
       mockFetch
         .mockResolvedValueOnce({ 
           ok: true, 
@@ -213,11 +213,11 @@ describe('Avaliação - Interface Popup', () => {
       render(<AvaliacaoPage />)
 
       await waitFor(() => {
-        expect(screen.getByText(/\d+ de 70/)).toBeInTheDocument()
+        expect(screen.getByText(/\d+ de 37/)).toBeInTheDocument()
       })
     })
 
-    it('deve iniciar com "1 de 70"', async () => {
+    it('deve iniciar com "1 de 37"', async () => {
       mockFetch
         .mockResolvedValueOnce({ 
           ok: true, 
@@ -236,7 +236,7 @@ describe('Avaliação - Interface Popup', () => {
       render(<AvaliacaoPage />)
 
       await waitFor(() => {
-        expect(screen.getByText('1 de 70')).toBeInTheDocument()
+        expect(screen.getByText('1 de 37')).toBeInTheDocument()
       })
     })
 
@@ -269,7 +269,7 @@ describe('Avaliação - Interface Popup', () => {
       render(<AvaliacaoPage />)
 
       await waitFor(() => {
-        expect(screen.getByText('1 de 70')).toBeInTheDocument()
+        expect(screen.getByText('1 de 37')).toBeInTheDocument()
       })
 
       // Clicar em uma opção (botão "Nunca")
@@ -277,7 +277,7 @@ describe('Avaliação - Interface Popup', () => {
       await user.click(primeiraOpcao)
 
       await waitFor(() => {
-        expect(screen.getByText('2 de 70')).toBeInTheDocument()
+        expect(screen.getByText('2 de 37')).toBeInTheDocument()
       })
     })
 
@@ -294,7 +294,23 @@ describe('Avaliação - Interface Popup', () => {
         .mockResolvedValueOnce({ 
           ok: true, 
           json: async () => ({ 
-            respostas: Array.from({ length: 15 }, (_, i) => ({ item: `Q${i + 1}`, valor: 50 })),
+            respostas: [
+              { item: 'Q1', valor: 50 },
+              { item: 'Q2', valor: 50 },
+              { item: 'Q3', valor: 50 },
+              { item: 'Q9', valor: 50 },
+              { item: 'Q13', valor: 50 },
+              { item: 'Q17', valor: 50 },
+              { item: 'Q18', valor: 50 },
+              { item: 'Q19', valor: 50 },
+              { item: 'Q20', valor: 50 },
+              { item: 'Q21', valor: 50 },
+              { item: 'Q22', valor: 50 },
+              { item: 'Q23', valor: 50 },
+              { item: 'Q24', valor: 50 },
+              { item: 'Q25', valor: 50 },
+              { item: 'Q26', valor: 50 }
+            ],
             total: 15 
           }) 
         } as Response)
@@ -303,7 +319,7 @@ describe('Avaliação - Interface Popup', () => {
       render(<AvaliacaoPage />)
 
       await waitFor(() => {
-        expect(screen.getByText('16 de 70')).toBeInTheDocument()
+        expect(screen.getByText('14 de 37')).toBeInTheDocument()
       })
     })
   })

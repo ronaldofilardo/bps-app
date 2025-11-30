@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS funcionarios (
             'funcionario',
             'rh',
             'admin',
-            'master'
+            'master',
+            'emissor'
         )
     ),
     ativo BOOLEAN DEFAULT TRUE,
@@ -152,4 +153,21 @@ VALUES (
         'rh@bps.com.br',
         '$2a$10$H3QK5YrKGQJN5yXZ9K5yXOK5YrKGQJN5yXZ9K5yXOK5YrKGQJN5yH',
         'rh'
+    ) ON CONFLICT (cpf) DO NOTHING;
+
+-- SEED: Inserir usuário Emissor padrão (senha: 123)
+INSERT INTO
+    funcionarios (
+        cpf,
+        nome,
+        email,
+        senha_hash,
+        perfil
+    )
+VALUES (
+        '99999999999',
+        'Emissor de Laudos',
+        'emissor@bps.com.br',
+        '$2a$10$7psX74O77VPARp4MxCqBS.lAQhcav5I0L/d7mUsGow8p1K4/f5Swy',
+        'emissor'
     ) ON CONFLICT (cpf) DO NOTHING;

@@ -151,6 +151,45 @@ describe('/api/auth/login', () => {
     })
   })
 
+  it('deve fazer login com sucesso para emissor', async () => {
+    ;(mockRequest.json as jest.Mock).mockResolvedValue({
+      cpf: '99999999999',
+      senha: '123'
+    })
+
+    mockQuery.mockResolvedValue({
+      rows: [{
+        cpf: '99999999999',
+        nome: 'Emissor de Laudos',
+        perfil: 'emissor',
+        senha_hash: '$2a$10$hash',
+        ativo: true,
+        nivel_cargo: null
+      }],
+      rowCount: 1
+    })
+
+    mockCompare.mockResolvedValue(true)
+    mockCreateSession.mockResolvedValue()
+
+    const response = await POST(mockRequest as NextRequest)
+    const data = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(data.success).toBe(true)
+    expect(data.cpf).toBe('99999999999')
+    expect(data.nome).toBe('Emissor de Laudos')
+    expect(data.perfil).toBe('emissor')
+    expect(data.redirectTo).toBe('/emissor')
+
+    expect(mockCreateSession).toHaveBeenCalledWith({
+      cpf: '99999999999',
+      nome: 'Emissor de Laudos',
+      perfil: 'emissor',
+      nivelCargo: null
+    })
+  })
+
   it('deve fazer login com sucesso para admin', async () => {
     ;(mockRequest.json as jest.Mock).mockResolvedValue({
       cpf: '00000000000',

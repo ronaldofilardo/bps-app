@@ -130,6 +130,7 @@ describe('/api/admin/funcionarios', () => {
 
       mockQuery
         .mockResolvedValueOnce({ rows: [{ clinica_id: 1 }], rowCount: 1 }) // RH lookup
+        .mockResolvedValueOnce({ rows: [{ id: 1 }], rowCount: 1 }) // empresa check
         .mockResolvedValueOnce({ rows: mockFuncionarios, rowCount: 1 }) // funcionários filtrados
 
       const { GET } = await import('@/app/api/admin/funcionarios/route')
@@ -144,8 +145,8 @@ describe('/api/admin/funcionarios', () => {
       expect(data.funcionarios[0].empresa_nome).toBe('Empresa Teste')
 
       // Verifica se a query incluiu o filtro de empresa
-      expect(mockQuery.mock.calls[1][0]).toContain('AND f.empresa_id = $2')
-      expect(mockQuery.mock.calls[1][1]).toEqual([1, '1'])
+      expect(mockQuery.mock.calls[2][0]).toContain('AND f.empresa_id = $2')
+      expect(mockQuery.mock.calls[2][1]).toEqual([1, '1'])
     })
 
     it('deve retornar todos os funcionários da clínica quando empresa_id não é fornecido', async () => {
@@ -202,6 +203,106 @@ describe('/api/admin/funcionarios', () => {
       expect(mockQuery.mock.calls[1][1]).toEqual([1])
     })
 
+    it('deve retornar lote_id e lote_codigo quando funcionário tem avaliação ativa', async () => {
+      const mockFuncionarios = [
+        {
+          cpf: '12345678901',
+          nome: 'João Silva',
+          setor: 'Produção',
+          funcao: 'Operador',
+          email: 'joao@empresa.com',
+          matricula: 'MAT001',
+          nivel_cargo: 'operacional',
+          turno: 'Manhã',
+          escala: '8x40',
+          empresa_nome: 'Empresa Teste',
+          empresa_id: 1,
+          ativo: true,
+          avaliacao_id: 1,
+          avaliacao_inicio: '2025-01-10',
+          avaliacao_envio: null,
+          avaliacao_status: 'em_andamento',
+          lote_id: 5,
+          lote_codigo: 'LOTE-2025-01'
+        }
+      ]
+
+      mockRequireRole.mockResolvedValue({
+        cpf: '11111111111',
+        nome: 'RH Teste',
+        perfil: 'rh'
+      })
+
+      mockQuery
+        .mockResolvedValueOnce({ rows: [{ clinica_id: 1 }], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: mockFuncionarios, rowCount: 1 })
+
+      const { GET } = await import('@/app/api/admin/funcionarios/route')
+
+      const request = new NextRequest('http://localhost:3000/api/admin/funcionarios')
+      const response = await GET(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(data.funcionarios).toHaveLength(1)
+      
+      const funcionario = data.funcionarios[0]
+      expect(funcionario.avaliacoes).toHaveLength(1)
+      expect(funcionario.avaliacoes[0].id).toBe(1)
+      expect(funcionario.avaliacoes[0].lote_id).toBe(5)
+      expect(funcionario.avaliacoes[0].lote_codigo).toBe('LOTE-2025-01')
+      
+      // Verifica que a query faz LEFT JOIN com avaliacoes e lotes_avaliacao
+      const queryCall = mockQuery.mock.calls[1]
+      expect(queryCall[0]).toContain('LEFT JOIN avaliacoes a ON')
+      expect(queryCall[0]).toContain('LEFT JOIN lotes_avaliacao la ON')
+    })
+
+    it('deve retornar array vazio de avaliações quando funcionário não tem avaliação', async () => {
+      const mockFuncionarios = [
+        {
+          cpf: '12345678901',
+          nome: 'João Silva',
+          setor: 'Produção',
+          funcao: 'Operador',
+          email: 'joao@empresa.com',
+          matricula: 'MAT001',
+          nivel_cargo: 'operacional',
+          turno: 'Manhã',
+          escala: '8x40',
+          empresa_nome: 'Empresa Teste',
+          empresa_id: 1,
+          ativo: true,
+          avaliacao_id: null,
+          avaliacao_inicio: null,
+          avaliacao_envio: null,
+          avaliacao_status: null,
+          lote_id: null,
+          lote_codigo: null
+        }
+      ]
+
+      mockRequireRole.mockResolvedValue({
+        cpf: '11111111111',
+        nome: 'RH Teste',
+        perfil: 'rh'
+      })
+
+      mockQuery
+        .mockResolvedValueOnce({ rows: [{ clinica_id: 1 }], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: mockFuncionarios, rowCount: 1 })
+
+      const { GET } = await import('@/app/api/admin/funcionarios/route')
+
+      const request = new NextRequest('http://localhost:3000/api/admin/funcionarios')
+      const response = await GET(request)
+      const data = await response.json()
+
+      expect(response.status).toBe(200)
+      const funcionario = data.funcionarios[0]
+      expect(funcionario.avaliacoes).toHaveLength(0)
+    })
+
     it('deve retornar lista vazia quando não há funcionários na empresa', async () => {
       mockRequireRole.mockResolvedValue({
         cpf: '11111111111',
@@ -211,11 +312,12 @@ describe('/api/admin/funcionarios', () => {
 
       mockQuery
         .mockResolvedValueOnce({ rows: [{ clinica_id: 1 }], rowCount: 1 }) // RH lookup
+        .mockResolvedValueOnce({ rows: [{ id: 1 }], rowCount: 1 }) // empresa check
         .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // nenhum funcionário
 
       const { GET } = await import('@/app/api/admin/funcionarios/route')
 
-      const request = new NextRequest('http://localhost:3000/api/admin/funcionarios?empresa_id=999')
+      const request = new NextRequest('http://localhost:3000/api/admin/funcionarios?empresa_id=1')
       const response = await GET(request)
       const data = await response.json()
 
@@ -358,7 +460,7 @@ describe('/api/admin/funcionarios', () => {
       const data = await response.json()
 
       expect(response.status).toBe(404)
-      expect(data.error).toBe('Administrador não encontrado')
+      expect(data.error).toBe('Gestor RH não encontrado')
     })
   })
 })

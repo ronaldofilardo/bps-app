@@ -10,7 +10,7 @@ jest.mock('@/lib/db', () => ({
 }))
 
 jest.mock('@/lib/session', () => ({
-  requireRole: jest.fn(),
+  requireRHWithEmpresaAccess: jest.fn(),
 }))
 
 jest.mock('bcryptjs', () => ({
@@ -19,11 +19,11 @@ jest.mock('bcryptjs', () => ({
 
 import { NextRequest } from 'next/server'
 import { query } from '@/lib/db'
-import { requireRole } from '@/lib/session'
+import { requireRHWithEmpresaAccess } from '@/lib/session'
 import bcrypt from 'bcryptjs'
 
 const mockQuery = query as jest.MockedFunction<typeof query>
-const mockRequireRole = requireRole as jest.MockedFunction<typeof requireRole>
+const mockRequireRHWithEmpresaAccess = requireRHWithEmpresaAccess as jest.MockedFunction<typeof requireRHWithEmpresaAccess>
 const mockBcryptHash = bcrypt.hash as jest.MockedFunction<typeof bcrypt.hash>
 
 describe('/api/admin/import', () => {
@@ -34,7 +34,7 @@ describe('/api/admin/import', () => {
 
   describe('Acesso RH', () => {
     it('deve permitir acesso ao perfil RH', async () => {
-      mockRequireRole.mockResolvedValue({
+      mockRequireRHWithEmpresaAccess.mockResolvedValue({
         cpf: '11111111111',
         nome: 'RH Teste',
         perfil: 'rh'
@@ -56,7 +56,8 @@ describe('/api/admin/import', () => {
             funcao: 'Operador',
             email: 'joao@empresa.com',
             empresa_id: 1
-          }]
+          }],
+          empresa_id: 1
         })
       })
 
@@ -66,11 +67,11 @@ describe('/api/admin/import', () => {
       expect(response.status).toBe(200)
       expect(data).toHaveProperty('sucesso')
       expect(data).toHaveProperty('erros')
-      expect(mockRequireRole).toHaveBeenCalledWith('rh')
+      expect(mockRequireRHWithEmpresaAccess).toHaveBeenCalledWith(1)
     })
 
     it('deve permitir acesso ao perfil admin', async () => {
-      mockRequireRole.mockResolvedValue({
+      mockRequireRHWithEmpresaAccess.mockResolvedValue({
         cpf: '00000000000',
         nome: 'Admin Teste',
         perfil: 'admin'
@@ -92,7 +93,8 @@ describe('/api/admin/import', () => {
             funcao: 'Operador',
             email: 'joao@empresa.com',
             empresa_id: 1
-          }]
+          }],
+          empresa_id: 1
         })
       })
 
@@ -105,7 +107,7 @@ describe('/api/admin/import', () => {
     })
 
     it('deve negar acesso a outros perfis', async () => {
-      mockRequireRole.mockRejectedValue(new Error('Sem permissão'))
+      mockRequireRHWithEmpresaAccess.mockRejectedValue(new Error('Sem permissão'))
 
       const { POST } = await import('@/app/api/admin/import/route')
 
@@ -118,7 +120,8 @@ describe('/api/admin/import', () => {
             setor: 'Produção',
             funcao: 'Operador',
             email: 'joao@empresa.com'
-          }]
+          }],
+          empresa_id: 1
         })
       })
 
@@ -159,7 +162,7 @@ describe('/api/admin/import', () => {
         }
       ]
 
-      mockRequireRole.mockResolvedValue({
+      mockRequireRHWithEmpresaAccess.mockResolvedValue({
         cpf: '11111111111',
         nome: 'RH Teste',
         perfil: 'rh'
@@ -173,7 +176,7 @@ describe('/api/admin/import', () => {
 
       const request = new NextRequest('http://localhost:3000/api/admin/import', {
         method: 'POST',
-        body: JSON.stringify({ funcionarios: funcionariosParaImportar })
+        body: JSON.stringify({ funcionarios: funcionariosParaImportar, empresa_id: 1 })
       })
 
       const response = await POST(request)
@@ -193,7 +196,7 @@ describe('/api/admin/import', () => {
     })
 
     it('deve usar senha padrão quando não fornecida', async () => {
-      mockRequireRole.mockResolvedValue({
+      mockRequireRHWithEmpresaAccess.mockResolvedValue({
         cpf: '11111111111',
         nome: 'RH Teste',
         perfil: 'rh'
@@ -216,7 +219,8 @@ describe('/api/admin/import', () => {
             email: 'joao@empresa.com',
             empresa_id: 1
             // senha não fornecida
-          }]
+          }],
+          empresa_id: 1
         })
       })
 
@@ -228,7 +232,7 @@ describe('/api/admin/import', () => {
     })
 
     it('deve usar senha fornecida quando disponível', async () => {
-      mockRequireRole.mockResolvedValue({
+      mockRequireRHWithEmpresaAccess.mockResolvedValue({
         cpf: '11111111111',
         nome: 'RH Teste',
         perfil: 'rh'
@@ -251,7 +255,8 @@ describe('/api/admin/import', () => {
             email: 'joao@empresa.com',
             senha: 'minhasenha123',
             empresa_id: 1
-          }]
+          }],
+          empresa_id: 1
         })
       })
 
@@ -263,7 +268,7 @@ describe('/api/admin/import', () => {
     })
 
     it('deve definir perfil padrão como "funcionario"', async () => {
-      mockRequireRole.mockResolvedValue({
+      mockRequireRHWithEmpresaAccess.mockResolvedValue({
         cpf: '11111111111',
         nome: 'RH Teste',
         perfil: 'rh'
@@ -286,7 +291,8 @@ describe('/api/admin/import', () => {
             email: 'joao@empresa.com',
             empresa_id: 1
             // perfil não fornecido
-          }]
+          }],
+          empresa_id: 1
         })
       })
 
@@ -301,7 +307,7 @@ describe('/api/admin/import', () => {
     })
 
     it('deve permitir definir perfil personalizado', async () => {
-      mockRequireRole.mockResolvedValue({
+      mockRequireRHWithEmpresaAccess.mockResolvedValue({
         cpf: '11111111111',
         nome: 'RH Teste',
         perfil: 'rh'
@@ -324,7 +330,8 @@ describe('/api/admin/import', () => {
             email: 'joao@empresa.com',
             perfil: 'rh',
             empresa_id: 1
-          }]
+          }],
+          empresa_id: 1
         })
       })
 
@@ -341,7 +348,7 @@ describe('/api/admin/import', () => {
 
   describe('Validação e tratamento de erros', () => {
     it('deve retornar erro 400 para dados inválidos', async () => {
-      mockRequireRole.mockResolvedValue({
+      mockRequireRHWithEmpresaAccess.mockResolvedValue({
         cpf: '11111111111',
         nome: 'RH Teste',
         perfil: 'rh'
@@ -362,7 +369,7 @@ describe('/api/admin/import', () => {
     })
 
     it('deve lidar com erros individuais de importação', async () => {
-      mockRequireRole.mockResolvedValue({
+      mockRequireRHWithEmpresaAccess.mockResolvedValue({
         cpf: '11111111111',
         nome: 'RH Teste',
         perfil: 'rh'
@@ -372,6 +379,7 @@ describe('/api/admin/import', () => {
         .mockResolvedValueOnce({ rows: [{ clinica_id: 1 }], rowCount: 1 }) // RH lookup
         .mockResolvedValueOnce({ rowCount: 1 }) // Primeiro INSERT success
         .mockRejectedValueOnce(new Error('Erro de constraint')) // Segundo INSERT falha
+        .mockResolvedValue({ rowCount: 1 }) // Default for any other calls
 
       const { POST } = await import('@/app/api/admin/import/route')
 
@@ -395,7 +403,8 @@ describe('/api/admin/import', () => {
               email: 'maria@empresa.com',
               empresa_id: 1
             }
-          ]
+          ],
+          empresa_id: 1
         })
       })
 
@@ -408,7 +417,7 @@ describe('/api/admin/import', () => {
     })
 
     it('deve atualizar funcionário existente em caso de conflito (ON CONFLICT)', async () => {
-      mockRequireRole.mockResolvedValue({
+      mockRequireRHWithEmpresaAccess.mockResolvedValue({
         cpf: '11111111111',
         nome: 'RH Teste',
         perfil: 'rh'
@@ -430,7 +439,8 @@ describe('/api/admin/import', () => {
             funcao: 'Operador Sênior',
             email: 'joao.atualizado@empresa.com',
             empresa_id: 1
-          }]
+          }],
+          empresa_id: 1
         })
       })
 
@@ -450,7 +460,7 @@ describe('/api/admin/import', () => {
     })
 
     it('deve definir valores null para campos opcionais não fornecidos', async () => {
-      mockRequireRole.mockResolvedValue({
+      mockRequireRHWithEmpresaAccess.mockResolvedValue({
         cpf: '11111111111',
         nome: 'RH Teste',
         perfil: 'rh'
@@ -473,7 +483,8 @@ describe('/api/admin/import', () => {
             email: 'joao@empresa.com',
             empresa_id: 1
             // matricula, nivel_cargo, turno, escala não fornecidos
-          }]
+          }],
+          empresa_id: 1
         })
       })
 
@@ -494,7 +505,7 @@ describe('/api/admin/import', () => {
 
   describe('Estrutura da query INSERT', () => {
     it('deve incluir todos os campos necessários no INSERT', async () => {
-      mockRequireRole.mockResolvedValue({
+      mockRequireRHWithEmpresaAccess.mockResolvedValue({
         cpf: '11111111111',
         nome: 'RH Teste',
         perfil: 'rh'
@@ -516,7 +527,8 @@ describe('/api/admin/import', () => {
             funcao: 'Operador',
             email: 'joao@empresa.com',
             empresa_id: 1
-          }]
+          }],
+          empresa_id: 1
         })
       })
 

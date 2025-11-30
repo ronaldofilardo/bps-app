@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Header from '@/components/Header'
+import NotificationsSection from '@/components/NotificationsSection'
 
 interface Session {
   cpf: string
@@ -100,6 +100,11 @@ export default function ClinicaOverviewPage() {
     router.push(`/rh/empresa/${empresaId}`)
   }
 
+  const handleNavigateToLote = (loteId: number) => {
+    // Navegar para o lote específico quando clicar na notificação
+    router.push(`/rh/lote/${loteId}`)
+  }
+
   if (loading || !session) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -110,12 +115,22 @@ export default function ClinicaOverviewPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
-
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-800 mb-2">Clínica BPS Brasil</h2>
-          <p className="text-gray-600">Visão geral das empresas e avaliações psicossociais</p>
+        {/* Header com botão de sair */}
+        <div className="mb-8 flex justify-between items-center">
+          <div>
+            <h2 className="text-3xl font-bold text-gray-800 mb-2">Clínica BPS Brasil</h2>
+            <p className="text-gray-600">Visão geral das empresas e avaliações psicossociais</p>
+          </div>
+          <button
+            onClick={async () => {
+              await fetch('/api/auth/logout', { method: 'POST' })
+              router.push('/login')
+            }}
+            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+          >
+            Sair
+          </button>
         </div>
 
         {/* Cards de estatísticas da clínica - Layout compacto */}
@@ -142,6 +157,9 @@ export default function ClinicaOverviewPage() {
             </div>
           </div>
         </div>
+
+        {/* Seção de Notificações */}
+        <NotificationsSection onNavigateToLote={handleNavigateToLote} />
 
         {/* Empresas - Layout compacto */}
         <div className="mb-6">

@@ -15,6 +15,7 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({
     push: jest.fn(),
   }),
+  usePathname: () => '/rh', // Mock do pathname para /rh
 }))
 
 // Mock do Header
@@ -78,14 +79,6 @@ describe('RH Dashboard - Visão Geral da Clínica', () => {
   })
 
   describe('Renderização inicial', () => {
-    it('deve exibir header da página', async () => {
-      render(<ClinicaOverviewPage />)
-
-      await waitFor(() => {
-        expect(screen.getByTestId('header')).toBeInTheDocument()
-      })
-    })
-
     it('deve exibir título da clínica', async () => {
       render(<ClinicaOverviewPage />)
 

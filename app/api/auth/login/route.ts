@@ -3,6 +3,7 @@ import { query, getDatabaseInfo } from '@/lib/db'
 import { createSession } from '@/lib/session'
 import bcrypt from 'bcryptjs'
 
+export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
   try {
     console.log('Database info:', getDatabaseInfo())
@@ -61,12 +62,20 @@ export async function POST(request: Request) {
       nivelCargo: funcionario.nivel_cargo,
     })
 
+    // Determinar redirecionamento baseado no perfil
+    let redirectTo = '/dashboard'
+    if (funcionario.perfil === 'master') redirectTo = '/master'
+    else if (funcionario.perfil === 'admin') redirectTo = '/admin'
+    else if (funcionario.perfil === 'rh') redirectTo = '/rh'
+    else if (funcionario.perfil === 'emissor') redirectTo = '/emissor'
+
     return NextResponse.json({
       success: true,
       cpf: funcionario.cpf,
       nome: funcionario.nome,
       perfil: funcionario.perfil,
       nivelCargo: funcionario.nivel_cargo,
+      redirectTo,
     })
   } catch (error) {
     console.error('Erro no login:', error)

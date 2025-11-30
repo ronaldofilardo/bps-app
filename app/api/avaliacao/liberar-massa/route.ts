@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/session";
 import { query } from "@/lib/db";
 import { NextResponse } from "next/server";
 
+export const dynamic = 'force-dynamic';
 export const POST = async (req: Request) => {
   const user = await requireAuth();
   if (!user || user.perfil !== "rh") {

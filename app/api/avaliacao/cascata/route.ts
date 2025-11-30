@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireAuth } from '@/lib/session'
 
+export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
   try {
     const session = await requireAuth()

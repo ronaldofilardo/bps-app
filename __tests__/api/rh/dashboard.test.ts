@@ -210,7 +210,7 @@ describe('/api/rh/dashboard', () => {
     expect(mockQuery.mock.calls[0][0]).toContain('clinica_id FROM funcionarios')
 
     // Query de estatísticas
-    expect(mockQuery.mock.calls[1][0]).toContain('COUNT(DISTINCT a.id)')
+    expect(mockQuery.mock.calls[1][0]).toContain('COUNT(DISTINCT CASE WHEN a.status != \'inativada\' THEN a.id END)')
     expect(mockQuery.mock.calls[1][0]).toContain('total_avaliacoes')
     expect(mockQuery.mock.calls[1][0]).toContain('concluidas')
     expect(mockQuery.mock.calls[1][0]).toContain('funcionarios_avaliados')

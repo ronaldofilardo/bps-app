@@ -40,6 +40,8 @@ export default function LoginPage() {
         router.push('/admin')
       } else if (data.perfil === 'rh') {
         router.push('/rh')
+      } else if (data.perfil === 'emissor') {
+        router.push('/emissor')
       } else {
         router.push('/dashboard')
       }
@@ -110,6 +112,7 @@ export default function LoginPage() {
           <p className="mt-1">Master: 00000000000 / master123</p>
           <p>Admin: 11111111111 / admin123</p>
           <p>RH: 22222222222 / rh123</p>
+          <p>Emissor: 99999999999 / 123</p>
           <p>Funcionário: 87545772900 / func123</p>
         </div>
       </div>

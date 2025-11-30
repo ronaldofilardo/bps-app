@@ -113,6 +113,21 @@ async function seedUsers() {
         setor: "Gerência",
         funcao: "Gerente de Produção",
       },
+      {
+        cpf: "99999999999",
+        nome: "Emissor de Laudos",
+        email: "emissor@bps.com.br",
+        senha: "123",
+        perfil: "emissor",
+        clinica_id: 1,
+        empresa_id: null,
+        matricula: null,
+        nivel_cargo: null,
+        turno: null,
+        escala: null,
+        setor: "Emissão",
+        funcao: "Emissor de Laudos",
+      },
     ];
 
     // Inserir usuários

@@ -1,28 +1,35 @@
 import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
-import { requireRole } from '@/lib/session'
+import { requireRHWithEmpresaAccess } from '@/lib/session'
 import bcrypt from 'bcryptjs'
 
+export const dynamic = 'force-dynamic';
 export async function POST(request: Request) {
   try {
-    const session = await requireRole('rh')
-    const { funcionarios } = await request.json()
+    const { funcionarios, empresa_id } = await request.json()
 
     if (!Array.isArray(funcionarios)) {
       return NextResponse.json({ error: 'Dados inválidos' }, { status: 400 })
     }
 
-    // Obter a clínica do admin logado
-    const adminResult = await query(
+    if (!empresa_id) {
+      return NextResponse.json({ error: 'empresa_id é obrigatório' }, { status: 400 })
+    }
+
+    // Validar acesso do RH à empresa
+    const session = await requireRHWithEmpresaAccess(empresa_id)
+
+    // Obter a clínica do RH logado
+    const rhResult = await query(
       'SELECT clinica_id FROM funcionarios WHERE cpf = $1',
       [session.cpf]
     )
 
-    if (adminResult.rows.length === 0) {
-      return NextResponse.json({ error: 'Administrador não encontrado' }, { status: 404 })
+    if (rhResult.rows.length === 0) {
+      return NextResponse.json({ error: 'Gestor RH não encontrado' }, { status: 404 })
     }
 
-    const clinicaId = adminResult.rows[0].clinica_id
+    const clinicaId = rhResult.rows[0].clinica_id
 
     let sucesso = 0
     let erros = 0

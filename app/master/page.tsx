@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Header from '@/components/Header'
 
 interface Session {
   cpf: string
@@ -122,7 +121,6 @@ export default function MasterAdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="flex justify-between items-center mb-6">
@@ -133,12 +131,23 @@ export default function MasterAdminPage() {
                 Logado como: <span className="font-semibold">{session?.nome}</span> (Master)
               </p>
             </div>
-            <button
-              onClick={() => setShowForm(true)}
-              className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 transition-colors"
-            >
-              Nova Clínica
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowForm(true)}
+                className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 transition-colors"
+              >
+                Nova Clínica
+              </button>
+              <button
+                onClick={async () => {
+                  await fetch('/api/auth/logout', { method: 'POST' })
+                  router.push('/login')
+                }}
+                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              >
+                Sair
+              </button>
+            </div>
           </div>
 
           {showForm && (

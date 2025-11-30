@@ -190,10 +190,10 @@ describe('lib/questoes', () => {
 
   describe('Contagem de questões', () => {
     it('deve ter o número correto total de questões', () => {
-      const totalQuestoes = grupos.reduce((acc, grupo) => acc + grupo.itens.length, 0)
-      // 70 questões tradicionais COPSOQ III + questões JZ + questões EF
-      expect(totalQuestoes).toBeGreaterThanOrEqual(70)
-    })
+       const totalQuestoes = grupos.reduce((acc, grupo) => acc + grupo.itens.length, 0)
+       // 37 questões após remoção das perguntas especificadas
+       expect(totalQuestoes).toBe(37)
+     })
 
     it('deve ter grupos com número razoável de questões', () => {
       grupos.forEach(grupo => {

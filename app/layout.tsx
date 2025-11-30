@@ -2,8 +2,10 @@
 import './globals.css'
 import type { Metadata } from 'next'
 import PWAInitializer from '@/components/PWAInitializer'
-import Header from '@/components/Header'
+import ConditionalHeader from '@/components/ConditionalHeader'
 import { getSession } from '@/lib/session'
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'BPS Brasil - Avaliação Psicossocial',
@@ -37,8 +39,8 @@ export default async function RootLayout({
       </head>
       <body>
         <PWAInitializer />
-        {/* Header global, sempre visível */}
-        <Header />
+        {/* Header condicional, não aparece em login e avaliação */}
+        <ConditionalHeader />
         {children}
       </body>
     </html>

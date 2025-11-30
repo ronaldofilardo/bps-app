@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { requireRole } from '@/lib/session'
 
+export const dynamic = 'force-dynamic';
 // GET - Listar empresas clientes da clínica do admin
 export async function GET() {
   try {

@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     // Verificar se é um array ou objeto único
     if (Array.isArray(body.respostas)) {
       respostas = body.respostas
-    } else if (body.item && body.valor) {
+    } else if (body.item !== undefined && body.valor !== undefined) {
       respostas = [body]
     }
 

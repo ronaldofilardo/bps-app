@@ -1,14 +1,7 @@
 import React from 'react'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import '@testing-library/jest-dom'
 import Header from '@/components/Header'
-
-// Mock do next/navigation
-const mockPush = jest.fn()
-jest.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: mockPush,
-  }),
-}))
 
 // Mock do fetch global
 const mockFetch = jest.fn()
@@ -19,246 +12,206 @@ describe('Header', () => {
     jest.clearAllMocks()
   })
 
-  it('deve renderizar o botão de sair', () => {
-    render(<Header userName="Usuário Teste" userRole="admin" />)
-    expect(screen.getByRole('button', { name: /sair/i })).toBeInTheDocument()
-  })
+  describe('Renderização com Props', () => {
+    it('deve renderizar header com props de funcionário', () => {
+      render(<Header userName="João Silva" userRole="funcionario" />)
 
-  it('deve ter cor de fundo escura e texto branco', () => {
-    render(<Header userName="Usuário Teste" userRole="admin" />)
-    const header = screen.getByRole('banner')
-    expect(header).toHaveStyle({ background: '#111', color: 'rgb(255, 255, 255)' })
-  })
-
-
-
-  it('deve buscar sessão na inicialização', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        cpf: '22222222222',
-        nome: 'João Operacional Silva',
-        perfil: 'funcionario',
-        nivelCargo: 'operacional'
-      })
+      expect(screen.getByRole('banner')).toBeInTheDocument()
+      expect(screen.getByText('João Silva')).toBeInTheDocument()
+      expect(screen.getByText('Avaliação Psicossocial')).toBeInTheDocument()
     })
 
-    render(<Header />)
+    it('deve renderizar header com props de RH', () => {
+      render(<Header userName="Maria Santos" userRole="rh" />)
 
-    await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledWith('/api/auth/session')
+      expect(screen.getByRole('banner')).toBeInTheDocument()
+      expect(screen.getByText('Maria Santos')).toBeInTheDocument()
+      expect(screen.getByText('Clínica BPS Brasil')).toBeInTheDocument()
     })
 
-    await waitFor(() => {
-      expect(screen.getByText('João Operacional Silva')).toBeInTheDocument()
-    })
-  })
+    it('deve renderizar header com props de admin', () => {
+      render(<Header userName="Carlos Admin" userRole="admin" />)
 
-  it('deve exibir nome do usuário quando há sessão', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        cpf: '22222222222',
-        nome: 'João Operacional Silva',
-        perfil: 'funcionario',
-        nivelCargo: 'operacional'
-      })
-    })
-
-    render(<Header />)
-
-    await waitFor(() => {
-      expect(screen.getByText('João Operacional Silva')).toBeInTheDocument()
-    })
-  })
-
-  it('deve exibir nome do usuário para perfil admin', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        cpf: '00000000000',
-        nome: 'Admin',
-        perfil: 'admin'
-      })
-    })
-
-    render(<Header />)
-
-    await waitFor(() => {
-      expect(screen.getByText('Admin')).toBeInTheDocument()
-    })
-  })
-
-  it('deve exibir nome do usuário para perfil rh', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        cpf: '11111111111',
-        nome: 'Gestor RH',
-        perfil: 'rh'
-      })
-    })
-
-    render(<Header />)
-
-    await waitFor(() => {
-      expect(screen.getByText('Gestor RH')).toBeInTheDocument()
-    })
-  })
-
-  it('deve exibir funcionário operacional corretamente', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        cpf: '22222222222',
-        nome: 'João Operacional Silva',
-        perfil: 'funcionario',
-        nivelCargo: 'operacional'
-      })
-    })
-
-    render(<Header />)
-
-    await waitFor(() => {
-      expect(screen.getByText('João Operacional Silva')).toBeInTheDocument()
-    })
-  })
-
-  it('deve exibir funcionário gestão corretamente', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        cpf: '33333333333',
-        nome: 'Maria Gestão Santos',
-        perfil: 'funcionario',
-        nivelCargo: 'gestao'
-      })
-    })
-
-    render(<Header />)
-
-    await waitFor(() => {
-      expect(screen.getByText('Maria Gestão Santos')).toBeInTheDocument()
-    })
-  })
-
-  it('não deve exibir nome quando não há sessão', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: false
-    })
-
-    render(<Header />)
-
-    await waitFor(() => {
-      // Não deve exibir nenhum nome de usuário
-      expect(screen.queryByText('João Operacional Silva')).not.toBeInTheDocument()
-      expect(screen.queryByText('Maria Gestão Santos')).not.toBeInTheDocument()
-      expect(screen.queryByText('Admin')).not.toBeInTheDocument()
-      expect(screen.queryByText('Gestor RH')).not.toBeInTheDocument()
-    })
-
-    // Deve ter apenas o botão sair
-    expect(screen.getByRole('button', { name: /sair/i })).toBeInTheDocument()
-  })
-
-  it('deve limpar sessão no logout', async () => {
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          cpf: '22222222222',
-          nome: 'João Operacional Silva',
-          perfil: 'funcionario',
-          nivelCargo: 'operacional'
-        })
-      })
-      .mockResolvedValueOnce({
-        ok: true
-      })
-
-    render(<Header />)
-
-    // Espera sessão carregar
-    await waitFor(() => {
-      expect(screen.getByText('João Operacional Silva')).toBeInTheDocument()
-    })
-
-    // Simula logout
-    fireEvent.click(screen.getByRole('button', { name: /sair/i }))
-
-    // Verifica se fetch de logout foi chamado
-    await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledWith('/api/auth/logout', { method: 'POST' })
-    })
-
-    // Nome deve desaparecer após logout
-    await waitFor(() => {
-      expect(screen.queryByText('João Operacional Silva')).not.toBeInTheDocument()
-    })
-  })
-
-  it('deve redirecionar para login após logout', async () => {
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          cpf: '22222222222',
-          nome: 'João Operacional Silva',
-          perfil: 'funcionario',
-          nivelCargo: 'operacional'
-        })
-      })
-      .mockResolvedValueOnce({
-        ok: true
-      })
-
-    render(<Header />)
-
-    await waitFor(() => {
-      expect(screen.getByText('João Operacional Silva')).toBeInTheDocument()
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: /sair/i }))
-
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/login')
-    })
-  })
-
-  it('deve mostrar título correto para master admin', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        cpf: '00000000000',
-        nome: 'Master Admin',
-        perfil: 'master'
-      })
-    })
-
-    render(<Header />)
-
-    await waitFor(() => {
-      const masterAdminElements = screen.getAllByText('Master Admin')
-      expect(masterAdminElements.length).toBeGreaterThan(0)
-      expect(masterAdminElements[0]).toBeInTheDocument()
-    })
-  })
-
-  it('deve mostrar título "Administração" para outros perfis', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        cpf: '22222222222',
-        nome: 'João Operacional Silva',
-        perfil: 'funcionario',
-        nivelCargo: 'operacional'
-      })
-    })
-
-    render(<Header />)
-
-    await waitFor(() => {
+      expect(screen.getByRole('banner')).toBeInTheDocument()
+      expect(screen.getByText('Carlos Admin')).toBeInTheDocument()
       expect(screen.getByText('Administração')).toBeInTheDocument()
+    })
+
+    it('deve renderizar header com props de master', () => {
+      render(<Header userName="Master User" userRole="master" />)
+
+      expect(screen.getByRole('banner')).toBeInTheDocument()
+      expect(screen.getByText('Master User')).toBeInTheDocument()
+      expect(screen.getByText('Master Admin')).toBeInTheDocument()
+    })
+
+    it('deve renderizar header com props de emissor', () => {
+      render(<Header userName="Dr. Emissor" userRole="emissor" />)
+
+      expect(screen.getByRole('banner')).toBeInTheDocument()
+      expect(screen.getByText('Dr. Emissor')).toBeInTheDocument()
+      expect(screen.getByText('Emissor de Laudos')).toBeInTheDocument()
+    })
+
+    it('deve renderizar header sem nome do usuário quando não fornecido', async () => {
+      // Quando só userRole é fornecido sem userName, o componente tenta buscar sessão da API
+      // Como a API falha (mock), não deve renderizar nada
+      render(<Header userRole="funcionario" />)
+
+      await waitFor(() => {
+        expect(screen.queryByRole('banner')).not.toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('Renderização com Sessão da API', () => {
+    it('deve buscar e renderizar dados da sessão quando não há props', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          cpf: '11111111111',
+          nome: 'Usuário da Sessão',
+          perfil: 'rh'
+        })
+      })
+
+      render(<Header />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('banner')).toBeInTheDocument()
+        expect(screen.getByText('Usuário da Sessão')).toBeInTheDocument()
+        expect(screen.getByText('Clínica BPS Brasil')).toBeInTheDocument()
+      })
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/auth/session', expect.objectContaining({
+        method: 'GET',
+        cache: 'no-store',
+        headers: expect.objectContaining({
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        })
+      }))
+    })
+
+    it('deve priorizar props sobre dados da sessão', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          cpf: '11111111111',
+          nome: 'Usuário da Sessão',
+          perfil: 'rh'
+        })
+      })
+
+      render(<Header userName="Nome das Props" userRole="admin" />)
+
+      await waitFor(() => {
+        expect(screen.getByRole('banner')).toBeInTheDocument()
+        expect(screen.getByText('Nome das Props')).toBeInTheDocument()
+        expect(screen.getByText('Administração')).toBeInTheDocument()
+      })
+
+      // Mesmo com sessão mockada, deve usar as props
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
+
+    it('deve renderizar null quando não há sessão válida', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({}) // Sessão vazia
+      })
+
+      const { container } = render(<Header />)
+
+      await waitFor(() => {
+        expect(container.firstChild).toBeNull()
+      })
+    })
+
+    it('deve renderizar null quando API falha', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('API Error'))
+
+      const { container } = render(<Header />)
+
+      await waitFor(() => {
+        expect(container.firstChild).toBeNull()
+      })
+    })
+  })
+
+  describe('Estados de Loading', () => {
+    it('deve renderizar null durante loading inicial', () => {
+      mockFetch.mockImplementationOnce(() => new Promise(() => {})) // Nunca resolve
+
+      const { container } = render(<Header />)
+
+      // Durante loading, deve retornar null
+      expect(container.firstChild).toBeNull()
+    })
+  })
+
+  describe('Estilos e Estrutura', () => {
+    it('deve ter os estilos corretos aplicados', () => {
+      render(<Header userName="Test User" userRole="funcionario" />)
+
+      const header = screen.getByRole('banner')
+
+      // Verificar apenas os estilos mais importantes que são aplicados inline
+      expect(header).toHaveStyle({
+        background: 'rgb(17, 17, 17)', // #111 em rgb
+        color: 'rgb(255, 255, 255)', // white em rgb
+        borderBottom: '4px solid rgb(255, 107, 0)', // #FF6B00 em rgb
+        position: 'sticky',
+        top: '0px',
+        display: 'flex',
+        minHeight: '64px'
+      })
+    })
+
+    it('deve ter título com fonte em negrito e tamanho 22px', () => {
+      render(<Header userName="Test User" userRole="funcionario" />)
+
+      const titleDiv = screen.getByText('Avaliação Psicossocial')
+
+      expect(titleDiv).toHaveStyle({
+        fontWeight: 'bold',
+        fontSize: '22px',
+        letterSpacing: '0.5px'
+      })
+    })
+
+    it('deve ter nome do usuário com fonte em negrito, tamanho 16px e cor laranja', () => {
+      render(<Header userName="Test User" userRole="funcionario" />)
+
+      const userNameSpan = screen.getByText('Test User')
+
+      expect(userNameSpan).toHaveStyle({
+        fontWeight: 'bold',
+        fontSize: '16px',
+        color: '#FF6B00'
+      })
+    })
+  })
+
+  describe('Função getRoleTitle', () => {
+    it('deve retornar títulos corretos para cada perfil', () => {
+      const { rerender } = render(<Header userName="Test" userRole="master" />)
+      expect(screen.getByText('Master Admin')).toBeInTheDocument()
+
+      rerender(<Header userName="Test" userRole="emissor" />)
+      expect(screen.getByText('Emissor de Laudos')).toBeInTheDocument()
+
+      rerender(<Header userName="Test" userRole="admin" />)
+      expect(screen.getByText('Administração')).toBeInTheDocument()
+
+      rerender(<Header userName="Test" userRole="rh" />)
+      expect(screen.getByText('Clínica BPS Brasil')).toBeInTheDocument()
+
+      rerender(<Header userName="Test" userRole="funcionario" />)
+      expect(screen.getByText('Avaliação Psicossocial')).toBeInTheDocument()
+
+      rerender(<Header userName="Test" userRole="unknown" />)
+      expect(screen.getByText('BPS Brasil')).toBeInTheDocument()
     })
   })
 })
