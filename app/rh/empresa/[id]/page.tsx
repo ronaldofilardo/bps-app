@@ -137,11 +137,11 @@ export default function EmpresaDashboardPage() {
           return
         }
         const sessionData = await sessionRes.json()
-        setSession(sessionData.session)
+        setSession(sessionData)
 
         // Só carregar dados se houver sessão
         await loadEmpresa()
-        await fetchFuncionarios(empresaId, sessionData.session.perfil)
+        await fetchFuncionarios(empresaId, sessionData.perfil)
         await fetchLotesRecentes()
         await fetchLaudos()
       } catch (error) {
