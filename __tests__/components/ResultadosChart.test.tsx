@@ -52,7 +52,7 @@ describe("ResultadosChart", () => {
       ...mockResultados,
       {
         grupo: 4,
-        dominio: 'Jogos de Azar',
+        dominio: 'Jogos de Apostas',
         score: 0,
         categoria: "baixo" as "baixo" | "medio" | "alto",
         tipo: "negativa" as "positiva" | "negativa",

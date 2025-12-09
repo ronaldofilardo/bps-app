@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     const dataParam = searchParams.get('data')
     const loteIdParam = searchParams.get('lote_id')
     const empresaIdParam = searchParams.get('empresa_id')
+    const cpfFilter = searchParams.get('cpf_filter') // Novo parâmetro para filtrar por CPF
     const formato = searchParams.get('formato') || 'json'
 
     if ((!dataParam && !loteIdParam) || !empresaIdParam) {
@@ -62,10 +63,22 @@ export async function GET(request: NextRequest) {
       // Filtrar por lote específico
       whereClause += " AND a.lote_id = $3"
       queryParams = [empresaIdParam, clinicaId, loteIdParam]
+      
+      // Se cpf_filter foi fornecido, adicionar filtro adicional
+      if (cpfFilter) {
+        whereClause += " AND f.cpf = $4"
+        queryParams.push(cpfFilter)
+      }
     } else {
       // Filtrar por data
       whereClause += " AND DATE(a.envio) = $3"
       queryParams = [empresaIdParam, clinicaId, dataParam]
+      
+      // Se cpf_filter foi fornecido, adicionar filtro adicional
+      if (cpfFilter) {
+        whereClause += " AND f.cpf = $4"
+        queryParams.push(cpfFilter)
+      }
     }
 
     const avaliacoesResult = await query(`
@@ -138,14 +151,55 @@ export async function GET(request: NextRequest) {
           })
         })
 
-        // Converter para array de grupos
+        // Converter para array de grupos com cálculo de média e classificação
         const gruposComRespostas = Array.from(respostasPorGrupo.entries()).map(([grupoId, respostas]) => {
           const grupoInfo = grupos.find(g => g.id === grupoId)
+          
+          // Calcular média do grupo
+          const somaValores = respostas.reduce((acc, r) => acc + r.valor, 0)
+          const media = respostas.length > 0 ? somaValores / respostas.length : 0
+          
+          // Classificar risco baseado na média
+          const gruposPositivos = [2, 3, 5, 6]
+          const isPositivo = gruposPositivos.includes(grupoId)
+          
+          let classificacao = ''
+          let corClassificacao = ''
+          
+          if (isPositivo) {
+            // Grupos positivos: maior é melhor
+            if (media > 66) {
+              classificacao = 'Excelente (Baixo Risco)'
+              corClassificacao = '#10b981' // green-500
+            } else if (media >= 33) {
+              classificacao = 'Monitorar (Médio Risco)'
+              corClassificacao = '#f59e0b' // amber-500
+            } else {
+              classificacao = 'Atenção (Alto Risco)'
+              corClassificacao = '#ef4444' // red-500
+            }
+          } else {
+            // Grupos negativos: menor é melhor
+            if (media < 33) {
+              classificacao = 'Excelente (Baixo Risco)'
+              corClassificacao = '#10b981' // green-500
+            } else if (media <= 66) {
+              classificacao = 'Monitorar (Médio Risco)'
+              corClassificacao = '#f59e0b' // amber-500
+            } else {
+              classificacao = 'Atenção (Alto Risco)'
+              corClassificacao = '#ef4444' // red-500
+            }
+          }
+          
           return {
             id: grupoId,
             titulo: grupoInfo?.titulo || `Grupo ${grupoId}`,
             dominio: grupoInfo?.dominio || '',
-            respostas
+            respostas,
+            media: media.toFixed(1),
+            classificacao,
+            corClassificacao
           }
         })
 
@@ -470,6 +524,9 @@ function gerarHTMLRelatorio(dados: any): string {
               <div class="grupo-card">
                 <div class="grupo-header">
                   <div class="grupo-titulo">${grupo.titulo}</div>
+                  <div class="grupo-classificacao" style="color: ${grupo.corClassificacao}; font-weight: 600; font-size: 14px; margin-top: 4px;">
+                    Classificação de risco: ${grupo.classificacao}
+                  </div>
                 </div>
                 <div class="questoes-lista">
                   ${grupo.respostas.map((resposta: any) => {

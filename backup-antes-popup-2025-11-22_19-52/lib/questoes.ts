@@ -159,13 +159,13 @@ export const grupos: GrupoAvaliacao[] = [
     id: 9,
     titulo: 'Grupo 9 - Jogos de Apostas',
     dominio: 'Comportamento de Jogo',
-    descricao: 'Avaliação de comportamentos relacionados a jogos de azar',
+    descricao: 'Avaliação de comportamentos relacionados a Jogos de Apostas',
     tipo: 'negativa',
     itens: [
       { id: 'Q59', texto: 'Com que frequência você joga em cassinos, bingos ou similares?' },
       { id: 'Q60', texto: 'Com que frequência você faz apostas esportivas?' },
       { id: 'Q61', texto: 'Com que frequência você joga em jogos online com apostas?' },
-      { id: 'Q62', texto: 'Com que frequência você se sente preocupado com jogos de azar?' },
+      { id: 'Q62', texto: 'Com que frequência você se sente preocupado com Jogos de Apostas?' },
       { id: 'Q63', texto: 'Jogar já causou problemas financeiros para você?' },
       { id: 'Q64', texto: 'Jogar já interferiu em suas relações pessoais?' },
     ]

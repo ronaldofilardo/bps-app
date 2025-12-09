@@ -1,0 +1,95 @@
+const { Client } = require("pg");
+
+const client = new Client({
+  connectionString: "postgresql://postgres:123456@localhost:5432/nr-bps_db",
+});
+
+async function fixEncoding() {
+  try {
+    await client.connect();
+
+    console.log("🔧 Corrigindo codificação de caracteres nos funcionários...");
+
+    // Buscar funcionários com possíveis problemas de codificação
+    const result = await client.query(`
+      SELECT id, nome, setor, funcao, email
+      FROM funcionarios
+      WHERE nome LIKE '%Ã%'
+        OR setor LIKE '%Ã%'
+        OR funcao LIKE '%Ã%'
+    `);
+
+    console.log(
+      `Encontrados ${result.rows.length} funcionários com possíveis problemas de codificação`
+    );
+
+    for (const func of result.rows) {
+      // Corrigir codificação Latin-1 para UTF-8
+      const nomeCorrigido = func.nome
+        .replace(/Ã©/g, "é")
+        .replace(/Ã¡/g, "á")
+        .replace(/Ã­/g, "í")
+        .replace(/Ã³/g, "ó")
+        .replace(/Ãº/g, "ú")
+        .replace(/Ã§/g, "ç")
+        .replace(/Ã£/g, "ã")
+        .replace(/Ãµ/g, "õ")
+        .replace(/Ãª/g, "ê")
+        .replace(/Ã¢/g, "â")
+        .replace(/Ãµ/g, "õ");
+
+      const setorCorrigido = func.setor
+        ? func.setor
+            .replace(/Ã©/g, "é")
+            .replace(/Ã¡/g, "á")
+            .replace(/Ã­/g, "í")
+            .replace(/Ã³/g, "ó")
+            .replace(/Ãº/g, "ú")
+            .replace(/Ã§/g, "ç")
+            .replace(/Ã£/g, "ã")
+            .replace(/Ãµ/g, "õ")
+            .replace(/Ãª/g, "ê")
+            .replace(/Ã¢/g, "â")
+        : func.setor;
+
+      const funcaoCorrigida = func.funcao
+        ? func.funcao
+            .replace(/Ã©/g, "é")
+            .replace(/Ã¡/g, "á")
+            .replace(/Ã­/g, "í")
+            .replace(/Ã³/g, "ó")
+            .replace(/Ãº/g, "ú")
+            .replace(/Ã§/g, "ç")
+            .replace(/Ã£/g, "ã")
+            .replace(/Ãµ/g, "õ")
+            .replace(/Ãª/g, "ê")
+            .replace(/Ã¢/g, "â")
+        : func.funcao;
+
+      if (
+        nomeCorrigido !== func.nome ||
+        setorCorrigido !== func.setor ||
+        funcaoCorrigida !== func.funcao
+      ) {
+        await client.query(
+          `
+          UPDATE funcionarios
+          SET nome = $1, setor = $2, funcao = $3, atualizado_em = CURRENT_TIMESTAMP
+          WHERE id = $4
+        `,
+          [nomeCorrigido, setorCorrigido, funcaoCorrigida, func.id]
+        );
+
+        console.log(`✅ Corrigido: ${func.nome} -> ${nomeCorrigido}`);
+      }
+    }
+
+    console.log("🎉 Correção de codificação concluída!");
+    await client.end();
+  } catch (err) {
+    console.error("Erro:", err);
+    process.exit(1);
+  }
+}
+
+fixEncoding();

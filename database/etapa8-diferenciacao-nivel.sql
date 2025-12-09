@@ -374,7 +374,7 @@ VALUES (
     (
         15,
         59,
-        'Você já fez apostas em jogos de azar (bet, loteria, cassino, jogo do bicho etc.)?',
+        'Você já fez apostas em Jogos de Apostas (bet, loteria, cassino, jogo do bicho etc.)?',
         'gestao'
     ),
     (

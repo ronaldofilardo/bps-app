@@ -98,7 +98,7 @@ VALUES (
         75.0,
         75.0,
         true,
-        'Alto risco de jogos de azar',
+        'Alto risco de Jogos de Apostas',
         'Oferecer suporte especializado'
     ),
     (

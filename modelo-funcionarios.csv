@@ -1,0 +1,6 @@
+cpf,nome,setor,funcao,email,perfil,empresa_id,matricula,nivel_cargo,turno,escala
+12345678900,João Silva,Produção,Operador de Máquina,joao.silva@empresa.com,funcionario,1,MAT001,operacional,Manhã,8x40
+98765432100,Maria Santos,Administrativo,Assistente Administrativo,maria.santos@empresa.com,funcionario,1,MAT002,operacional,Tarde,8x40
+11122233344,Carlos Oliveira,Manutenção,Técnico de Manutenção,carlos.oliveira@empresa.com,funcionario,1,MAT003,operacional,Noite,12x36
+55566677788,Ana Costa,Engenharia,Engenheira de Processos,ana.costa@empresa.com,funcionario,1,MAT004,gestao,Comercial,8x44
+99988877766,José Pereira,Qualidade,Analista de Qualidade,jose.pereira@empresa.com,funcionario,1,MAT005,operacional,Manhã,6x40

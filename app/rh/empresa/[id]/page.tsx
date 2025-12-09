@@ -4,6 +4,7 @@ import React from 'react'
 import { useEffect, useState, Fragment } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import ModalInserirFuncionario from '@/components/ModalInserirFuncionario'
+import RelatorioSetor from '@/components/RelatorioSetor'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js'
 import { Bar } from 'react-chartjs-2'
 
@@ -110,23 +111,53 @@ export default function EmpresaDashboardPage() {
   const [descricaoLote, setDescricaoLote] = useState('')
   const [liberandoLote, setLiberandoLote] = useState(false)
   const [lotesRecentes, setLotesRecentes] = useState<LoteAvaliacao[]>([])
-  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
-  const [showInserirModal, setShowInserirModal] = useState(false)
+  const [selectedFuncionarios, setSelectedFuncionarios] = useState<string[]>([])
+  const [batchOperationInProgress, setBatchOperationInProgress] = useState(false)
+  const [batchOperationType, setBatchOperationType] = useState<'activate' | 'deactivate' | null>(null)
+  const [showBatchConfirmDialog, setShowBatchConfirmDialog] = useState(false)
+  const [laudos, setLaudos] = useState<Laudo[]>([])
+  const [downloadingLaudo, setDownloadingLaudo] = useState<number | null>(null)
   const [paginaAtual, setPaginaAtual] = useState(1)
   const [busca, setBusca] = useState('')
   const funcionariosPorPagina = 20
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'lotes' | 'funcionarios'>('lotes')
-  const [laudos, setLaudos] = useState<Laudo[]>([])
-  const [downloadingLaudo, setDownloadingLaudo] = useState<number | null>(null)
+  const [showInserirModal, setShowInserirModal] = useState(false)
+  const [showRelatorioSetor, setShowRelatorioSetor] = useState(false)
+  const [loteIdRelatorioSetor, setLoteIdRelatorioSetor] = useState<number | null>(null)
+  const [setoresDisponiveis, setSetoresDisponiveis] = useState<string[]>([])
 
   useEffect(() => {
-    const loadEmpresaAndData = async () => {
-      await loadEmpresa()
-      await fetchData()
-      await fetchLotesRecentes()
-      await fetchLaudos()
+    const checkSessionAndLoad = async () => {
+      try {
+        // Verificar se há sessão válida
+        const sessionRes = await fetch('/api/auth/session')
+        if (!sessionRes.ok) {
+          router.push('/login')
+          return
+        }
+        const sessionData = await sessionRes.json()
+        setSession(sessionData.session)
+
+        // Só carregar dados se houver sessão
+        await loadEmpresa()
+        await fetchData()
+        await fetchLotesRecentes()
+        await fetchLaudos()
+      } catch (error) {
+        console.error('Erro ao verificar sessão:', error)
+        router.push('/login')
+      }
     }
-    loadEmpresaAndData()
+    checkSessionAndLoad()
+  }, [empresaId])
+
+  // Carregar funcionários quando a aba é ativada
+  useEffect(() => {
+    if (empresaId) {
+      fetchFuncionarios(empresaId)
+      setSelectedFuncionarios([]) // Limpar seleção ao carregar
+    }
   }, [empresaId])
 
   const loadEmpresa = async () => {
@@ -279,18 +310,42 @@ export default function EmpresaDashboardPage() {
     }
   }
 
+  const abrirRelatorioSetor = async (loteId: number) => {
+    // Buscar setores disponíveis
+    try {
+      const response = await fetch(`/api/rh/funcionarios?empresa_id=${empresaId}`)
+      if (response.ok) {
+        const data = await response.json()
+        const setores = [...new Set(data.funcionarios.map((f: any) => f.setor))].filter(Boolean) as string[]
+        setSetoresDisponiveis(setores.sort())
+        setLoteIdRelatorioSetor(loteId)
+        setShowRelatorioSetor(true)
+      }
+    } catch (error) {
+      console.error('Erro ao buscar setores:', error)
+      alert('Erro ao carregar setores disponíveis')
+    }
+  }
+
   // Filtrar funcionários baseado na busca (incluindo inativos)
   const funcionariosFiltrados = funcionarios.filter(func =>
     func.nome.toLowerCase().includes(busca.toLowerCase()) ||
     func.cpf.includes(busca) ||
     func.setor.toLowerCase().includes(busca.toLowerCase()) ||
-    func.funcao.toLowerCase().includes(busca.toLowerCase())
+    func.funcao.toLowerCase().includes(busca.toLowerCase()) ||
+    (func.matricula && func.matricula.toLowerCase().includes(busca.toLowerCase())) ||
+    (func.nivel_cargo && func.nivel_cargo.toLowerCase().includes(busca.toLowerCase()))
   )
 
   // Calcular paginação
   const totalPaginas = Math.ceil(funcionariosFiltrados.length / funcionariosPorPagina)
   const inicioIndex = (paginaAtual - 1) * funcionariosPorPagina
   const funcionariosPaginados = funcionariosFiltrados.slice(inicioIndex, inicioIndex + funcionariosPorPagina)
+
+  // Limpar seleção quando página muda
+  useEffect(() => {
+    setSelectedFuncionarios([])
+  }, [paginaAtual])
 
   const atualizarStatusFuncionario = async (cpf: string, novoStatus: boolean) => {
     const acao = novoStatus ? 'ativar' : 'desativar'
@@ -321,6 +376,81 @@ export default function EmpresaDashboardPage() {
       alert('Erro ao atualizar status: ' + error)
     } finally {
       setUpdatingStatus(null)
+    }
+  }
+
+  // Funções para seleção em lote
+  const handleSelectFuncionario = (cpf: string, selected: boolean) => {
+    if (selected) {
+      setSelectedFuncionarios(prev => [...prev, cpf])
+    } else {
+      setSelectedFuncionarios(prev => prev.filter(c => c !== cpf))
+    }
+  }
+
+  const handleSelectAll = (selected: boolean) => {
+    if (selected) {
+      setSelectedFuncionarios(funcionariosPaginados.map(f => f.cpf))
+    } else {
+      setSelectedFuncionarios([])
+    }
+  }
+
+  const isAllSelected = funcionariosPaginados.length > 0 && 
+    funcionariosPaginados.every(f => selectedFuncionarios.includes(f.cpf))
+
+  const isSomeSelected = funcionariosPaginados.some(f => selectedFuncionarios.includes(f.cpf))
+
+  // Função para operações em lote
+  const handleBatchOperation = async (operationType: 'activate' | 'deactivate', targetFuncionarios: string[]) => {
+    if (targetFuncionarios.length === 0) return
+
+    // Limite de segurança: máximo 50 funcionários por operação
+    if (targetFuncionarios.length > 50) {
+      alert(`Operação limitada a 50 funcionários por vez. Você selecionou ${targetFuncionarios.length}.`)
+      return
+    }
+
+    setBatchOperationType(operationType)
+    setShowBatchConfirmDialog(true)
+  }
+
+  const executeBatchOperation = async () => {
+    if (!batchOperationType) return
+
+    const targetFuncionarios = selectedFuncionarios.length > 0 ? selectedFuncionarios : 
+      (busca ? funcionariosFiltrados.map(f => f.cpf) : [])
+
+    if (targetFuncionarios.length === 0) return
+
+    setBatchOperationInProgress(true)
+    setShowBatchConfirmDialog(false)
+
+    try {
+      const response = await fetch('/api/rh/funcionarios/status/batch', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          cpfs: targetFuncionarios, 
+          ativo: batchOperationType === 'activate' 
+        })
+      })
+
+      const result = await response.json()
+
+      if (response.ok && result.success) {
+        alert(result.message)
+        // Limpar seleção e recarregar funcionários
+        setSelectedFuncionarios([])
+        await fetchFuncionarios(empresaId)
+      } else {
+        alert('Erro: ' + (result.error || 'Erro desconhecido'))
+      }
+    } catch (error) {
+      alert('Erro na operação em lote: ' + error)
+    } finally {
+      setBatchOperationInProgress(false)
+      setBatchOperationType(null)
     }
   }
 
@@ -382,7 +512,9 @@ export default function EmpresaDashboardPage() {
 
     setUploading(true)
     try {
-      const text = await uploadFile.text()
+      let text = await uploadFile.text()
+      // Remover BOM UTF-8 se presente
+      text = text.replace(/^\uFEFF/, '')
       const lines = text.split('\n').filter(line => line.trim())
 
       if (lines.length === 0) {
@@ -636,7 +768,20 @@ export default function EmpresaDashboardPage() {
                     const isPronto = lote.avaliacoes_concluidas === (lote.total_avaliacoes - lote.avaliacoes_inativadas)
                     const laudoAssociado = laudos.find(l => l.lote_id === lote.id)
                     return (
-                      <div key={lote.id} className="bg-gray-50 rounded-lg p-5 border border-gray-200 hover:shadow-md transition-shadow">
+                      <div 
+                        key={lote.id} 
+                        className="bg-gray-50 rounded-lg p-5 border border-gray-200 hover:shadow-lg hover:border-primary transition-all cursor-pointer"
+                        onClick={() => router.push(`/rh/empresa/${empresaId}/lote/${lote.id}`)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            router.push(`/rh/empresa/${empresaId}/lote/${lote.id}`)
+                          }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`Ver detalhes do lote ${lote.codigo}`}
+                      >
                         <div className="mb-4">
                           <h5 className="font-semibold text-gray-800 text-base mb-1">{lote.titulo}</h5>
                           <p className="text-sm text-gray-600">Código: {lote.codigo}</p>
@@ -667,11 +812,25 @@ export default function EmpresaDashboardPage() {
                         </div>
 
                         <button
-                          onClick={() => gerarRelatorioLote(lote.id, lote.codigo)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            gerarRelatorioLote(lote.id, lote.codigo)
+                          }}
                           disabled={!isPronto || gerandoRelatorioLote === lote.id}
-                          className="w-full bg-green-600 text-white px-3 py-2 rounded text-sm hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed mb-4"
+                          className="w-full bg-green-600 text-white px-3 py-2 rounded text-sm hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed mb-2"
                         >
                           {gerandoRelatorioLote === lote.id ? 'Gerando...' : '📊 Gerar Relatório PDF'}
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            abrirRelatorioSetor(lote.id)
+                          }}
+                          disabled={!isPronto}
+                          className="w-full bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed mb-4"
+                        >
+                          📋 Relatório por Setor
                         </button>
 
                         {/* Laudo associado */}
@@ -685,7 +844,10 @@ export default function EmpresaDashboardPage() {
                             </div>
                             <p className="text-xs text-blue-700 mb-2">Emissor: {laudoAssociado.emissor_nome}</p>
                             <button
-                              onClick={() => handleDownloadLaudo(laudoAssociado)}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDownloadLaudo(laudoAssociado)
+                              }}
                               disabled={downloadingLaudo === laudoAssociado.id}
                               className="w-full bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                             >
@@ -765,25 +927,79 @@ export default function EmpresaDashboardPage() {
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      placeholder="Buscar por nome, CPF, setor..."
+                      placeholder="Buscar por nome, CPF, setor, matrícula, nível de cargo..."
                       value={busca}
                       onChange={(e) => {
                         setBusca(e.target.value)
                         setPaginaAtual(1) // Reset para primeira página
+                        setSelectedFuncionarios([]) // Limpar seleção ao mudar busca
                       }}
                       className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                   </div>
                 </div>
+
+                {/* Ações em Lote */}
+                {(selectedFuncionarios.length > 0 || (busca && funcionariosFiltrados.length > 0)) && (
+                  <div className="flex flex-wrap items-center gap-3 mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="text-sm text-blue-800 font-medium">
+                      {selectedFuncionarios.length > 0 ? (
+                        `${selectedFuncionarios.length} funcionário(s) selecionado(s)`
+                      ) : (
+                        `Filtro ativo: ${funcionariosFiltrados.length} funcionário(s) encontrado(s)`
+                      )}
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleBatchOperation('activate', selectedFuncionarios.length > 0 ? selectedFuncionarios : funcionariosFiltrados.map(f => f.cpf))}
+                        disabled={batchOperationInProgress}
+                        className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                      >
+                        {batchOperationInProgress ? '🔄 Processando...' : '✅ Ativar'}
+                      </button>
+                      
+                      <button
+                        onClick={() => handleBatchOperation('deactivate', selectedFuncionarios.length > 0 ? selectedFuncionarios : funcionariosFiltrados.map(f => f.cpf))}
+                        disabled={batchOperationInProgress}
+                        className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                      >
+                        {batchOperationInProgress ? '🔄 Processando...' : '❌ Desativar'}
+                      </button>
+
+                      {selectedFuncionarios.length > 0 && (
+                        <button
+                          onClick={() => setSelectedFuncionarios([])}
+                          className="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
+                        >
+                          🗑️ Limpar Seleção
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        <input
+                          type="checkbox"
+                          checked={isAllSelected}
+                          ref={(el) => {
+                            if (el) el.indeterminate = isSomeSelected && !isAllSelected
+                          }}
+                          onChange={(e) => handleSelectAll(e.target.checked)}
+                          className="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary focus:ring-2"
+                        />
+                      </th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">CPF</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Setor</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Função</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Matrícula</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nível de Cargo</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Lote</th>
@@ -795,10 +1011,20 @@ export default function EmpresaDashboardPage() {
                   <tbody className="divide-y divide-gray-200">
                     {funcionariosPaginados.map((func, idx) => (
                       <tr key={idx} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 text-sm text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedFuncionarios.includes(func.cpf)}
+                            onChange={(e) => handleSelectFuncionario(func.cpf, e.target.checked)}
+                            className="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary focus:ring-2"
+                          />
+                        </td>
                         <td className="px-3 py-2 text-sm text-gray-900 font-mono">{func.cpf}</td>
                         <td className="px-3 py-2 text-sm text-gray-900">{func.nome}</td>
                         <td className="px-3 py-2 text-sm text-gray-900">{func.setor}</td>
                         <td className="px-3 py-2 text-sm text-gray-900">{func.funcao}</td>
+                        <td className="px-3 py-2 text-sm text-gray-900">{func.matricula || '-'}</td>
+                        <td className="px-3 py-2 text-sm text-gray-900">{func.nivel_cargo || '-'}</td>
                         <td className="px-3 py-2 text-sm text-center">
                           <input
                             type="checkbox"
@@ -843,7 +1069,7 @@ export default function EmpresaDashboardPage() {
 
                     {funcionariosFiltrados.length === 0 && (
                       <tr>
-                        <td colSpan={10} className="px-3 py-4 text-center text-sm text-gray-500">
+                        <td colSpan={13} className="px-3 py-4 text-center text-sm text-gray-500">
                           {busca ? 'Nenhum funcionário encontrado para a busca' : 'Nenhum funcionário encontrado'}
                         </td>
                       </tr>
@@ -852,7 +1078,7 @@ export default function EmpresaDashboardPage() {
                     {/* Controles de paginação */}
                     {totalPaginas > 1 && (
                       <tr>
-                        <td colSpan={10} className="px-3 py-3 text-center bg-gray-50">
+                        <td colSpan={13} className="px-3 py-3 text-center bg-gray-50">
                           <div className="flex items-center justify-center gap-2">
                             <button
                               onClick={() => setPaginaAtual(Math.max(1, paginaAtual - 1))}
@@ -979,6 +1205,78 @@ export default function EmpresaDashboardPage() {
           onSuccess={() => {
             fetchFuncionarios(empresaId) // Recarregar lista
             setShowInserirModal(false)
+          }}
+        />
+      )}
+
+      {/* Modal de Confirmação para Operações em Lote */}
+      {showBatchConfirmDialog && batchOperationType && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Confirmar Operação em Lote
+            </h3>
+            
+            <div className="mb-6">
+              <p className="text-gray-700 mb-2">
+                Você está prestes a <strong>{batchOperationType === 'activate' ? 'ativar' : 'desativar'}</strong> 
+                {' '}
+                <strong>
+                  {selectedFuncionarios.length > 0 
+                    ? `${selectedFuncionarios.length} funcionário(s) selecionado(s)`
+                    : `${funcionariosFiltrados.length} funcionário(s) filtrado(s)`
+                  }
+                </strong>
+              </p>
+              
+              {batchOperationType === 'deactivate' && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mt-3">
+                  <p className="text-yellow-800 text-sm">
+                    ⚠️ <strong>Atenção:</strong> Desativar funcionários marcará todas as suas avaliações como inativadas, 
+                    e elas não aparecerão nos relatórios.
+                  </p>
+                </div>
+              )}
+              
+              <p className="text-gray-600 text-sm mt-3">
+                Esta ação não pode ser desfeita. Deseja continuar?
+              </p>
+            </div>
+            
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowBatchConfirmDialog(false)}
+                className="px-4 py-2 text-gray-600 bg-gray-100 rounded hover:bg-gray-200"
+                disabled={batchOperationInProgress}
+              >
+                Cancelar
+              </button>
+              
+              <button
+                onClick={executeBatchOperation}
+                disabled={batchOperationInProgress}
+                className={`px-4 py-2 text-white rounded ${
+                  batchOperationType === 'activate' 
+                    ? 'bg-green-600 hover:bg-green-700' 
+                    : 'bg-red-600 hover:bg-red-700'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {batchOperationInProgress ? '🔄 Processando...' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Relatório por Setor */}
+      {showRelatorioSetor && loteIdRelatorioSetor && (
+        <RelatorioSetor
+          loteId={loteIdRelatorioSetor}
+          empresaId={parseInt(empresaId)}
+          setores={setoresDisponiveis}
+          onClose={() => {
+            setShowRelatorioSetor(false)
+            setLoteIdRelatorioSetor(null)
           }}
         />
       )}

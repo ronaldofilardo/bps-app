@@ -359,13 +359,15 @@ describe('Interface com Abas - Dashboard Empresa', () => {
     })
 
     it('deve exibir tabela de funcionários', async () => {
-      expect(screen.getByText('👥 Funcionários (20)')).toBeInTheDocument()
+      await waitFor(() => {
+        expect(screen.getByText('👥 Funcionários (20)')).toBeInTheDocument()
+      })
       expect(screen.getByText('Funcionário 1')).toBeInTheDocument()
-      expect(screen.getByPlaceholderText('Buscar por nome, CPF, setor...')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText('Buscar por nome, CPF, setor, matrícula, nível de cargo...')).toBeInTheDocument()
     })
 
     it('deve permitir busca de funcionários', async () => {
-      const searchInput = screen.getByPlaceholderText('Buscar por nome, CPF, setor...')
+      const searchInput = screen.getByPlaceholderText('Buscar por nome, CPF, setor, matrícula, nível de cargo...')
       fireEvent.change(searchInput, { target: { value: 'Funcionário 5' } })
 
       await waitFor(() => {

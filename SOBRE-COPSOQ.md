@@ -181,7 +181,7 @@ Alto endividamento das famílias brasileiras afeta saúde mental e desempenho.
 - Conflito Trabalho-Família
 - Saúde e Bem-Estar
 - Comportamentos Ofensivos
-- Jogos de Azar
+- Jogos de Apostas
 - Endividamento
 
 **Dimensões Positivas** (quanto maior, melhor):

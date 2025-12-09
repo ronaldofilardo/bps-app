@@ -334,21 +334,37 @@ export default function EditarLaudo() {
               {/* Texto Principal */}
               <div className="mb-6">
                 <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-6 border-l-4 border-blue-500">
-                  <p className="text-gray-800 leading-relaxed mb-4">{laudoPadronizado.etapa3.textoPrincipal}</p>
                   <p className="text-gray-700 leading-relaxed">{laudoPadronizado.etapa3.conclusao}</p>
                 </div>
               </div>
 
               {/* Resumo dos grupos por categoria */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-6">
                 {/* Excelente - Verde */}
+                {laudoPadronizado.etapa3.gruposExcelente && laudoPadronizado.etapa3.gruposExcelente.length > 0 && (
                 <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-5 border-2 border-green-300 shadow-md">
                   <div className="flex items-center mb-3">
-                    <span className="text-2xl mr-2">✅</span>
-                    <h4 className="font-bold text-green-800 text-base">Excelente</h4>
+                    <span className="text-2xl mr-2">🟢</span>
+                    <h4 className="font-bold text-green-800 text-base">1. Risco Psicossocial Baixo (menor que 33%)</h4>
                   </div>
-                  <p className="text-xs text-green-700 font-medium mb-2">(Baixo Risco)</p>
-                  {laudoPadronizado.etapa3.gruposExcelente.length > 0 ? (
+                  <p className="text-xs text-green-700 font-medium mb-2">Consideração final detalhada:</p>
+                  <p className="text-sm text-green-800 mb-3">
+                    Os resultados obtidos no Questionário Psicossocial de Copenhague (COPSOQ) indicam um baixo risco psicossocial no ambiente de trabalho, correspondendo ao tertil inferior de exposição a fatores de risco. Isso significa que, de modo geral, as condições organizacionais favorecem o bem-estar e a saúde mental dos trabalhadores. Os fatores psicossociais avaliados — como demandas quantitativas, emocionais, apoio social, influência no trabalho, reconhecimento e equilíbrio entre vida pessoal e profissional — estão sendo geridos de forma adequada, sem evidências de impactos negativos relevantes.
+                  </p>
+                  <p className="text-sm text-green-800 mb-3">
+                    De acordo com a NR-01, um cenário de baixo risco não elimina a necessidade de monitoramento contínuo, mas demonstra que as ações preventivas e de promoção à saúde mental estão sendo eficazes. Recomenda-se que a organização mantenha as boas práticas atuais, como:
+                  </p>
+                  <ul className="text-sm text-green-800 space-y-1 ml-4">
+                    <li>• Comunicação aberta entre equipes e gestores;</li>
+                    <li>• Políticas de reconhecimento e valorização profissional;</li>
+                    <li>• Programas de qualidade de vida e equilíbrio emocional;</li>
+                    <li>• Incentivo ao diálogo e à escuta ativa em todos os níveis hierárquicos.</li>
+                  </ul>
+                  <p className="text-sm text-green-800 mt-3">
+                    Mesmo em ambientes com baixo risco, a manutenção do clima organizacional e da motivação depende de atenção constante. Sugere-se incluir este resultado no Inventário de Riscos do Programa de Gerenciamento de Riscos (PGR), assegurando que as condições favoráveis atuais sejam acompanhadas e mantidas de forma sistemática, alinhando-se às diretrizes do COPSOQ para avaliações periódicas.
+                  </p>
+                  <div className="mt-4">
+                    <p className="text-xs text-green-700 font-medium mb-2">Grupos identificados:</p>
                     <ul className="space-y-1">
                       {laudoPadronizado.etapa3.gruposExcelente.map((g, idx) => (
                         <li key={idx} className="text-sm text-green-800">
@@ -356,19 +372,35 @@ export default function EditarLaudo() {
                         </li>
                       ))}
                     </ul>
-                  ) : (
-                    <p className="text-sm text-green-700 italic">Nenhum grupo identificado</p>
-                  )}
+                  </div>
                 </div>
+                )}
 
                 {/* Monitorar - Amarelo */}
+                {laudoPadronizado.etapa3.gruposMonitoramento && laudoPadronizado.etapa3.gruposMonitoramento.length > 0 && (
                 <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-5 border-2 border-yellow-300 shadow-md">
                   <div className="flex items-center mb-3">
-                    <span className="text-2xl mr-2">⚠️</span>
-                    <h4 className="font-bold text-yellow-800 text-base">Monitorar</h4>
+                    <span className="text-2xl mr-2">🟡</span>
+                    <h4 className="font-bold text-yellow-800 text-base">2. Risco Psicossocial Moderado (entre 33% e 66%)</h4>
                   </div>
-                  <p className="text-xs text-yellow-700 font-medium mb-2">(Risco Médio)</p>
-                  {laudoPadronizado.etapa3.gruposMonitoramento.length > 0 ? (
+                  <p className="text-xs text-yellow-700 font-medium mb-2">Consideração final detalhada:</p>
+                  <p className="text-sm text-yellow-800 mb-3">
+                    O resultado do Questionário Psicossocial de Copenhague (COPSOQ) aponta para um nível moderado de risco psicossocial, correspondendo ao tertil médio de exposição, indicando que o ambiente de trabalho apresenta algumas situações ou percepções que merecem atenção preventiva. Isso pode envolver fatores como demandas moderadas de trabalho, falhas na comunicação interna, falta de clareza nas metas, períodos de estresse temporário ou desafios pontuais no relacionamento entre equipes e gestores.
+                  </p>
+                  <p className="text-sm text-yellow-800 mb-3">
+                    Conforme a NR-01, cabe à organização identificar as causas desses resultados e implantar ações de controle e prevenção antes que se agravem. As medidas podem incluir:
+                  </p>
+                  <ul className="text-sm text-yellow-800 space-y-1 ml-4">
+                    <li>• Reuniões de alinhamento sobre papéis e responsabilidades;</li>
+                    <li>• Adequação das cargas e jornadas de trabalho;</li>
+                    <li>• Programas de apoio psicológico ou rodas de conversa internas;</li>
+                    <li>• Treinamentos voltados à gestão empática e ao fortalecimento do trabalho em equipe.</li>
+                  </ul>
+                  <p className="text-sm text-yellow-800 mt-3">
+                    É essencial que essas ações sejam documentadas e acompanhadas no Programa de Gerenciamento de Riscos (PGR), com reavaliações periódicas para medir a eficácia das melhorias implementadas, utilizando os benchmarks do COPSOQ como referência. Embora o risco moderado não represente uma situação crítica, ele sinaliza pontos de atenção que, se não tratados, podem evoluir para um risco elevado no futuro.
+                  </p>
+                  <div className="mt-4">
+                    <p className="text-xs text-yellow-700 font-medium mb-2">Grupos identificados:</p>
                     <ul className="space-y-1">
                       {laudoPadronizado.etapa3.gruposMonitoramento.map((g, idx) => (
                         <li key={idx} className="text-sm text-yellow-800">
@@ -376,30 +408,46 @@ export default function EditarLaudo() {
                         </li>
                       ))}
                     </ul>
-                  ) : (
-                    <p className="text-sm text-yellow-700 italic">Nenhum grupo identificado</p>
-                  )}
+                  </div>
                 </div>
+                )}
 
                 {/* Atenção Necessária - Laranja/Vermelho */}
-                <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-5 border-2 border-orange-400 shadow-md">
+                {laudoPadronizado.etapa3.gruposAltoRisco && laudoPadronizado.etapa3.gruposAltoRisco.length > 0 && (
+                <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-5 border-2 border-red-300 shadow-md">
                   <div className="flex items-center mb-3">
-                    <span className="text-2xl mr-2">🚨</span>
-                    <h4 className="font-bold text-orange-800 text-base">Atenção Necessária</h4>
+                    <span className="text-2xl mr-2">🔴</span>
+                    <h4 className="font-bold text-red-800 text-base">3. Risco Psicossocial Elevado (maior que 66%)</h4>
                   </div>
-                  <p className="text-xs text-orange-700 font-medium mb-2">(Risco Médio)</p>
-                  {laudoPadronizado.etapa3.gruposAtencao.length > 0 ? (
+                  <p className="text-xs text-red-700 font-medium mb-2">Consideração final detalhada:</p>
+                  <p className="text-sm text-red-800 mb-3">
+                    O resultado do Questionário Psicossocial de Copenhague (COPSOQ) indica um risco psicossocial elevado, correspondendo ao tertil superior de exposição, o que significa que há fatores importantes interferindo na saúde mental e emocional dos trabalhadores. Esse cenário pode estar relacionado a demandas altas de trabalho, falta de reconhecimento, pressão excessiva, ausência de apoio da liderança, conflitos interpessoais ou ambiente organizacional desgastante, potencialmente levando a condições como ansiedade, depressão ou burnout.
+                  </p>
+                  <p className="text-sm text-red-800 mb-3">
+                    Segundo a NR-01, quando um risco é classificado como elevado, a empresa deve agir de forma estruturada e imediata, buscando identificar as causas raiz e implantar medidas corretivas e preventivas eficazes. Essas medidas podem incluir:
+                  </p>
+                  <ul className="text-sm text-red-800 space-y-1 ml-4">
+                    <li>• Implementação de programas de apoio psicológico e escuta ativa;</li>
+                    <li>• Revisão de processos organizacionais e distribuição de tarefas;</li>
+                    <li>• Capacitação de gestores em liderança humanizada e prevenção de assédio moral;</li>
+                    <li>• Melhoria na comunicação interna e nos canais de feedback;</li>
+                    <li>• Promoção de ações voltadas à saúde mental e ao equilíbrio entre trabalho e vida pessoal, com intervenção prioritária.</li>
+                  </ul>
+                  <p className="text-sm text-red-800 mt-3">
+                    Esse nível de risco exige registro detalhado no inventário de riscos do PGR, bem como acompanhamento contínuo por parte da alta gestão e dos responsáveis pelo SESMT ou equipe de saúde e segurança, alinhando-se aos critérios de risco do COPSOQ. A ausência de ações concretas pode gerar adoecimento ocupacional, absenteísmo e queda de produtividade, devendo a organização priorizar planos de intervenção imediata para mitigar os impactos.
+                  </p>
+                  <div className="mt-4">
+                    <p className="text-xs text-red-700 font-medium mb-2">Grupos identificados:</p>
                     <ul className="space-y-1">
-                      {laudoPadronizado.etapa3.gruposAtencao.map((g, idx) => (
-                        <li key={idx} className="text-sm text-orange-800">
+                      {laudoPadronizado.etapa3.gruposAltoRisco.map((g, idx) => (
+                        <li key={idx} className="text-sm text-red-800">
                           • {g.grupo} - {g.dominio}
                         </li>
                       ))}
                     </ul>
-                  ) : (
-                    <p className="text-sm text-orange-700 italic">Nenhum grupo identificado</p>
-                  )}
+                  </div>
                 </div>
+                )}
               </div>
             </div>
           )}

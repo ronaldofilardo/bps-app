@@ -124,14 +124,15 @@ BEGIN
             r.grupo as grupo_num,
             CASE r.grupo
                 WHEN 1 THEN 'Demandas no Trabalho'
-                WHEN 2 THEN 'Organização e Conteúdo'
-                WHEN 3 THEN 'Relações Sociais'
-                WHEN 4 THEN 'Liderança'
+                WHEN 2 THEN 'Organização e Conteúdo do Trabalho'
+                WHEN 3 THEN 'Relações Sociais e Liderança'
+                WHEN 4 THEN 'Interface Trabalho-Indivíduo'
                 WHEN 5 THEN 'Valores Organizacionais'
-                WHEN 6 THEN 'Saúde e Bem-estar'
-                WHEN 7 THEN 'Comportamentos Ofensivos'
-                WHEN 8 THEN 'Jogos de Azar'
-                WHEN 9 THEN 'Endividamento'
+                WHEN 6 THEN 'Traços de Personalidade'
+                WHEN 7 THEN 'Saúde e Bem-Estar'
+                WHEN 8 THEN 'Comportamentos Ofensivos'
+                WHEN 9 THEN 'Comportamento de Jogo'
+                WHEN 10 THEN 'Endividamento Financeiro'
                 ELSE 'Outros'
             END as dominio_nome,
             ROUND(AVG(r.valor), 2) as score_medio,
@@ -160,7 +161,7 @@ BEGIN
         jsonb_build_object(
             'alertas_criticos', ARRAY[
                 'Comportamentos ofensivos detectados em ' || COUNT(CASE WHEN r.grupo = 8 AND r.valor > 0 THEN 1 END) || ' respostas',
-                'Alto risco de jogos de azar em ' || COUNT(CASE WHEN r.grupo = 9 AND r.valor > 50 THEN 1 END) || ' casos',
+                'Alto risco de Jogos de Apostas em ' || COUNT(CASE WHEN r.grupo = 9 AND r.valor > 50 THEN 1 END) || ' casos',
                 'Problemas de endividamento em ' || COUNT(CASE WHEN r.grupo = 10 AND r.valor > 75 THEN 1 END) || ' funcionários'
             ],
             'recomendacoes_prioritarias', ARRAY[
@@ -206,14 +207,15 @@ SELECT
     r.valor as resposta_valor,
     CASE r.grupo
         WHEN 1 THEN 'Demandas no Trabalho'
-        WHEN 2 THEN 'Organização e Conteúdo'
-        WHEN 3 THEN 'Relações Sociais'
-        WHEN 4 THEN 'Liderança'
+        WHEN 2 THEN 'Organização e Conteúdo do Trabalho'
+        WHEN 3 THEN 'Relações Sociais e Liderança'
+        WHEN 4 THEN 'Interface Trabalho-Indivíduo'
         WHEN 5 THEN 'Valores Organizacionais'
-        WHEN 6 THEN 'Saúde e Bem-estar'
-        WHEN 7 THEN 'Comportamentos Ofensivos'
-        WHEN 8 THEN 'Jogos de Azar'
-        WHEN 9 THEN 'Endividamento'
+        WHEN 6 THEN 'Traços de Personalidade'
+        WHEN 7 THEN 'Saúde e Bem-Estar'
+        WHEN 8 THEN 'Comportamentos Ofensivos'
+        WHEN 9 THEN 'Comportamento de Jogo'
+        WHEN 10 THEN 'Endividamento Financeiro'
         ELSE 'Outros'
     END as dominio_nome
 FROM funcionarios f

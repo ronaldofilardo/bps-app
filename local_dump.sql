@@ -6,15 +6,25 @@
 -- Dumped by pg_dump version 17.5
 
 SET statement_timeout = 0;
+
 SET lock_timeout = 0;
+
 SET idle_in_transaction_session_timeout = 0;
+
 SET transaction_timeout = 0;
+
 SET client_encoding = 'UTF8';
+
 SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
+
+SELECT pg_catalog.set_config ('search_path', '', false);
+
 SET check_function_bodies = false;
+
 SET xmloption = content;
+
 SET client_min_messages = warning;
+
 SET row_security = off;
 
 --
@@ -26,7 +36,6 @@ CREATE TYPE public.nivel_cargo_enum AS ENUM (
     'gestao'
 );
 
-
 ALTER TYPE public.nivel_cargo_enum OWNER TO postgres;
 
 --
@@ -35,37 +44,65 @@ ALTER TYPE public.nivel_cargo_enum OWNER TO postgres;
 
 CREATE FUNCTION public.detectar_anomalia_score(p_score numeric, p_tipo character varying, p_grupo integer) RETURNS TABLE(is_anomalous boolean, reason text, adjusted_score numeric)
     LANGUAGE plpgsql
-    AS $$
-BEGIN
-    -- Scores fora do range válido (0-100)
-    IF p_score < 0 OR p_score > 100 THEN
-        RETURN QUERY SELECT true, 'Score fora do intervalo válido', GREATEST(0, LEAST(100, p_score));
-        RETURN;
-    END IF;
-    
-    -- Scores negativos em escalas positivas
-    IF p_score < 0 AND p_tipo = 'positiva' THEN
-        RETURN QUERY SELECT true, 'Score negativo em escala positiva', 0::DECIMAL;
-        RETURN;
-    END IF;
-    
-    -- Padrões suspeitos (todas respostas iguais)
-    IF p_score IN (0, 25, 50, 75, 100) THEN
-        RETURN QUERY SELECT true, 'Possível padrão de resposta uniforme', p_score;
-        RETURN;
-    END IF;
-    
-    -- Grupos específicos
-    IF p_grupo = 8 AND p_score > 0 THEN
-        RETURN QUERY SELECT true, 'Comportamentos ofensivos detectados', GREATEST(p_score, 25);
-        RETURN;
-    END IF;
-    
-    -- Score normal
-    RETURN QUERY SELECT false, 'Score normal'::TEXT, p_score;
-END;
-$$;
+    AS $$
 
+BEGIN
+
+    -- Scores fora do range válido (0-100)
+
+    IF p_score < 0 OR p_score > 100 THEN
+
+        RETURN QUERY SELECT true, 'Score fora do intervalo válido', GREATEST(0, LEAST(100, p_score));
+
+        RETURN;
+
+    END IF;
+
+    
+
+    -- Scores negativos em escalas positivas
+
+    IF p_score < 0 AND p_tipo = 'positiva' THEN
+
+        RETURN QUERY SELECT true, 'Score negativo em escala positiva', 0::DECIMAL;
+
+        RETURN;
+
+    END IF;
+
+    
+
+    -- Padrões suspeitos (todas respostas iguais)
+
+    IF p_score IN (0, 25, 50, 75, 100) THEN
+
+        RETURN QUERY SELECT true, 'Possível padrão de resposta uniforme', p_score;
+
+        RETURN;
+
+    END IF;
+
+    
+
+    -- Grupos específicos
+
+    IF p_grupo = 8 AND p_score > 0 THEN
+
+        RETURN QUERY SELECT true, 'Comportamentos ofensivos detectados', GREATEST(p_score, 25);
+
+        RETURN;
+
+    END IF;
+
+    
+
+    -- Score normal
+
+    RETURN QUERY SELECT false, 'Score normal'::TEXT, p_score;
+
+END;
+
+$$;
 
 ALTER FUNCTION public.detectar_anomalia_score(p_score numeric, p_tipo character varying, p_grupo integer) OWNER TO postgres;
 
@@ -75,28 +112,47 @@ ALTER FUNCTION public.detectar_anomalia_score(p_score numeric, p_tipo character 
 
 CREATE FUNCTION public.gerar_codigo_lote() RETURNS character varying
     LANGUAGE plpgsql
-    AS $$
-DECLARE
-    data_atual VARCHAR(6);
-    sequencial INT;
-    codigo VARCHAR(20);
-BEGIN
-    -- Formato: 001-DDMMYY (ex: 001-291125)
-    data_atual := TO_CHAR(CURRENT_DATE, 'DDMMYY');
-
-    -- Buscar prÃ³ximo sequencial para a data
-    SELECT COALESCE(MAX(CAST(SPLIT_PART(la.codigo, '-', 1) AS INTEGER)), 0) + 1
-    INTO sequencial
-    FROM lotes_avaliacao la
-    WHERE la.codigo LIKE '%-' || data_atual;
-
-    -- Formatar cÃ³digo com zeros Ã  esquerda
-    codigo := LPAD(sequencial::TEXT, 3, '0') || '-' || data_atual;
-
-    RETURN codigo;
-END;
-$$;
+    AS $$
 
+DECLARE
+
+    data_atual VARCHAR(6);
+
+    sequencial INT;
+
+    codigo VARCHAR(20);
+
+BEGIN
+
+    -- Formato: 001-DDMMYY (ex: 001-291125)
+
+    data_atual := TO_CHAR(CURRENT_DATE, 'DDMMYY');
+
+
+
+    -- Buscar prÃ³ximo sequencial para a data
+
+    SELECT COALESCE(MAX(CAST(SPLIT_PART(la.codigo, '-', 1) AS INTEGER)), 0) + 1
+
+    INTO sequencial
+
+    FROM lotes_avaliacao la
+
+    WHERE la.codigo LIKE '%-' || data_atual;
+
+
+
+    -- Formatar cÃ³digo com zeros Ã  esquerda
+
+    codigo := LPAD(sequencial::TEXT, 3, '0') || '-' || data_atual;
+
+
+
+    RETURN codigo;
+
+END;
+
+$$;
 
 ALTER FUNCTION public.gerar_codigo_lote() OWNER TO postgres;
 
@@ -106,126 +162,243 @@ ALTER FUNCTION public.gerar_codigo_lote() OWNER TO postgres;
 
 CREATE FUNCTION public.gerar_dados_relatorio(p_clinica_id integer, p_template_id integer DEFAULT 1, p_empresa_id integer DEFAULT NULL::integer, p_data_inicio date DEFAULT NULL::date, p_data_fim date DEFAULT NULL::date) RETURNS TABLE(secao character varying, tipo_dados character varying, dados jsonb, metadados jsonb)
     LANGUAGE plpgsql
-    AS $$
-DECLARE
-    template_config RECORD;
-BEGIN
-    -- Buscar configuração do template
-    SELECT * INTO template_config FROM relatorio_templates WHERE id = p_template_id;
-    
-    -- Seção: Resumo Executivo
-    RETURN QUERY
-    SELECT 
-        'resumo_executivo'::VARCHAR as secao,
-        'estatisticas_gerais'::VARCHAR as tipo_dados,
-        jsonb_build_object(
-            'total_funcionarios', COUNT(DISTINCT f.cpf),
-            'total_avaliacoes', COUNT(a.id),
-            'avaliacoes_concluidas', COUNT(CASE WHEN a.status = 'concluida' THEN 1 END),
-            'taxa_conclusao', ROUND((COUNT(CASE WHEN a.status = 'concluida' THEN 1 END) * 100.0 / NULLIF(COUNT(a.id), 0)), 2),
-            'funcionarios_operacionais', COUNT(DISTINCT CASE WHEN f.nivel_cargo = 'operacional' THEN f.cpf END),
-            'funcionarios_gestao', COUNT(DISTINCT CASE WHEN f.nivel_cargo = 'gestao' THEN f.cpf END)
-        ) as dados,
-        jsonb_build_object(
-            'periodo', COALESCE(p_data_inicio::TEXT, '2024-01-01') || ' a ' || COALESCE(p_data_fim::TEXT, CURRENT_DATE::TEXT),
-            'clinica_id', p_clinica_id,
-            'empresa_filtro', CASE WHEN p_empresa_id IS NOT NULL THEN 'específica' ELSE 'todas' END
-        ) as metadados
-    FROM funcionarios f
-    LEFT JOIN avaliacoes a ON f.cpf = a.funcionario_cpf
-    LEFT JOIN empresas_clientes ec ON f.empresa_id = ec.id
-    WHERE f.clinica_id = p_clinica_id 
-        AND (p_empresa_id IS NULL OR ec.id = p_empresa_id)
-        AND (p_data_inicio IS NULL OR a.created_at >= p_data_inicio)
-        AND (p_data_fim IS NULL OR a.created_at <= p_data_fim);
-    
-    -- Seção: Análise por Domínios
-    RETURN QUERY
-    SELECT 
-        'analise_dominios'::VARCHAR as secao,
-        'scores_por_grupo'::VARCHAR as tipo_dados,
-        jsonb_agg(
-            jsonb_build_object(
-                'grupo', grupo_num,
-                'dominio', dominio_nome,
-                'score_medio', score_medio,
-                'categoria', categoria,
-                'total_respostas', total_respostas
-            )
-        ) as dados,
-        jsonb_build_object(
-            'metodologia', 'COPSOQ-III',
-            'escala', '0-100',
-            'interpretacao', 'alto=75+, medio=50-74, baixo=0-49'
-        ) as metadados
-    FROM (
-        SELECT 
-            r.grupo as grupo_num,
-            CASE r.grupo
-                WHEN 1 THEN 'Demandas no Trabalho'
-                WHEN 2 THEN 'Organização e Conteúdo'
-                WHEN 3 THEN 'Relações Sociais'
-                WHEN 4 THEN 'Liderança'
-                WHEN 5 THEN 'Valores Organizacionais'
-                WHEN 6 THEN 'Saúde e Bem-estar'
-                WHEN 7 THEN 'Comportamentos Ofensivos'
-                WHEN 8 THEN 'Jogos de Azar'
-                WHEN 9 THEN 'Endividamento'
-                ELSE 'Outros'
-            END as dominio_nome,
-            ROUND(AVG(r.valor), 2) as score_medio,
-            CASE 
-                WHEN AVG(r.valor) >= 75 THEN 'Alto'
-                WHEN AVG(r.valor) >= 50 THEN 'Médio'
-                ELSE 'Baixo'
-            END as categoria,
-            COUNT(r.valor) as total_respostas
-        FROM respostas r
-        JOIN avaliacoes a ON r.avaliacao_id = a.id
-        JOIN funcionarios f ON a.funcionario_cpf = f.cpf
-        LEFT JOIN empresas_clientes ec ON f.empresa_id = ec.id
-        WHERE f.clinica_id = p_clinica_id 
-            AND (p_empresa_id IS NULL OR ec.id = p_empresa_id)
-            AND a.status = 'concluida'
-        GROUP BY r.grupo
-        ORDER BY r.grupo
-    ) dados_grupos;
-    
-    -- Seção: Alertas e Recomendações
-    RETURN QUERY
-    SELECT 
-        'alertas_recomendacoes'::VARCHAR as secao,
-        'analise_critica'::VARCHAR as tipo_dados,
-        jsonb_build_object(
-            'alertas_criticos', ARRAY[
-                'Comportamentos ofensivos detectados em ' || COUNT(CASE WHEN r.grupo = 8 AND r.valor > 0 THEN 1 END) || ' respostas',
-                'Alto risco de jogos de azar em ' || COUNT(CASE WHEN r.grupo = 9 AND r.valor > 50 THEN 1 END) || ' casos',
-                'Problemas de endividamento em ' || COUNT(CASE WHEN r.grupo = 10 AND r.valor > 75 THEN 1 END) || ' funcionários'
-            ],
-            'recomendacoes_prioritarias', ARRAY[
-                'Implementar programa de prevenção ao assédio e violência',
-                'Oferecer orientação financeira e sobre jogos responsáveis',
-                'Revisar carga de trabalho e organização das demandas',
-                'Fortalecer canais de comunicação e feedback'
-            ]
-        ) as dados,
-        jsonb_build_object(
-            'base_analise', 'Respostas com pontuação de risco',
-            'criterios', 'Grupos 8,9,10 com scores > limites críticos',
-            'urgencia', 'Alta para comportamentos ofensivos'
-        ) as metadados
-    FROM respostas r
-    JOIN avaliacoes a ON r.avaliacao_id = a.id
-    JOIN funcionarios f ON a.funcionario_cpf = f.cpf
-    LEFT JOIN empresas_clientes ec ON f.empresa_id = ec.id
-    WHERE f.clinica_id = p_clinica_id 
-        AND (p_empresa_id IS NULL OR ec.id = p_empresa_id)
-        AND a.status = 'concluida'
-        AND r.grupo IN (8, 9, 10);
-        
-END;
-$$;
+    AS $$
 
+DECLARE
+
+    template_config RECORD;
+
+BEGIN
+
+    -- Buscar configuração do template
+
+    SELECT * INTO template_config FROM relatorio_templates WHERE id = p_template_id;
+
+    
+
+    -- Seção: Resumo Executivo
+
+    RETURN QUERY
+
+    SELECT 
+
+        'resumo_executivo'::VARCHAR as secao,
+
+        'estatisticas_gerais'::VARCHAR as tipo_dados,
+
+        jsonb_build_object(
+
+            'total_funcionarios', COUNT(DISTINCT f.cpf),
+
+            'total_avaliacoes', COUNT(a.id),
+
+            'avaliacoes_concluidas', COUNT(CASE WHEN a.status = 'concluida' THEN 1 END),
+
+            'taxa_conclusao', ROUND((COUNT(CASE WHEN a.status = 'concluida' THEN 1 END) * 100.0 / NULLIF(COUNT(a.id), 0)), 2),
+
+            'funcionarios_operacionais', COUNT(DISTINCT CASE WHEN f.nivel_cargo = 'operacional' THEN f.cpf END),
+
+            'funcionarios_gestao', COUNT(DISTINCT CASE WHEN f.nivel_cargo = 'gestao' THEN f.cpf END)
+
+        ) as dados,
+
+        jsonb_build_object(
+
+            'periodo', COALESCE(p_data_inicio::TEXT, '2024-01-01') || ' a ' || COALESCE(p_data_fim::TEXT, CURRENT_DATE::TEXT),
+
+            'clinica_id', p_clinica_id,
+
+            'empresa_filtro', CASE WHEN p_empresa_id IS NOT NULL THEN 'específica' ELSE 'todas' END
+
+        ) as metadados
+
+    FROM funcionarios f
+
+    LEFT JOIN avaliacoes a ON f.cpf = a.funcionario_cpf
+
+    LEFT JOIN empresas_clientes ec ON f.empresa_id = ec.id
+
+    WHERE f.clinica_id = p_clinica_id 
+
+        AND (p_empresa_id IS NULL OR ec.id = p_empresa_id)
+
+        AND (p_data_inicio IS NULL OR a.created_at >= p_data_inicio)
+
+        AND (p_data_fim IS NULL OR a.created_at <= p_data_fim);
+
+    
+
+    -- Seção: Análise por Domínios
+
+    RETURN QUERY
+
+    SELECT 
+
+        'analise_dominios'::VARCHAR as secao,
+
+        'scores_por_grupo'::VARCHAR as tipo_dados,
+
+        jsonb_agg(
+
+            jsonb_build_object(
+
+                'grupo', grupo_num,
+
+                'dominio', dominio_nome,
+
+                'score_medio', score_medio,
+
+                'categoria', categoria,
+
+                'total_respostas', total_respostas
+
+            )
+
+        ) as dados,
+
+        jsonb_build_object(
+
+            'metodologia', 'COPSOQ-III',
+
+            'escala', '0-100',
+
+            'interpretacao', 'alto=75+, medio=50-74, baixo=0-49'
+
+        ) as metadados
+
+    FROM (
+
+        SELECT 
+
+            r.grupo as grupo_num,
+
+            CASE r.grupo
+
+                WHEN 1 THEN 'Demandas no Trabalho'
+
+                WHEN 2 THEN 'Organização e Conteúdo'
+
+                WHEN 3 THEN 'Relações Sociais'
+
+                WHEN 4 THEN 'Liderança'
+
+                WHEN 5 THEN 'Valores Organizacionais'
+
+                WHEN 6 THEN 'Saúde e Bem-estar'
+
+                WHEN 7 THEN 'Comportamentos Ofensivos'
+
+                WHEN 8 THEN 'Jogos de Apostas'
+
+                WHEN 9 THEN 'Endividamento'
+
+                ELSE 'Outros'
+
+            END as dominio_nome,
+
+            ROUND(AVG(r.valor), 2) as score_medio,
+
+            CASE 
+
+                WHEN AVG(r.valor) >= 75 THEN 'Alto'
+
+                WHEN AVG(r.valor) >= 50 THEN 'Médio'
+
+                ELSE 'Baixo'
+
+            END as categoria,
+
+            COUNT(r.valor) as total_respostas
+
+        FROM respostas r
+
+        JOIN avaliacoes a ON r.avaliacao_id = a.id
+
+        JOIN funcionarios f ON a.funcionario_cpf = f.cpf
+
+        LEFT JOIN empresas_clientes ec ON f.empresa_id = ec.id
+
+        WHERE f.clinica_id = p_clinica_id 
+
+            AND (p_empresa_id IS NULL OR ec.id = p_empresa_id)
+
+            AND a.status = 'concluida'
+
+        GROUP BY r.grupo
+
+        ORDER BY r.grupo
+
+    ) dados_grupos;
+
+    
+
+    -- Seção: Alertas e Recomendações
+
+    RETURN QUERY
+
+    SELECT 
+
+        'alertas_recomendacoes'::VARCHAR as secao,
+
+        'analise_critica'::VARCHAR as tipo_dados,
+
+        jsonb_build_object(
+
+            'alertas_criticos', ARRAY[
+
+                'Comportamentos ofensivos detectados em ' || COUNT(CASE WHEN r.grupo = 8 AND r.valor > 0 THEN 1 END) || ' respostas',
+
+                'Alto risco de Jogos de Apostas em ' || COUNT(CASE WHEN r.grupo = 9 AND r.valor > 50 THEN 1 END) || ' casos',
+
+                'Problemas de endividamento em ' || COUNT(CASE WHEN r.grupo = 10 AND r.valor > 75 THEN 1 END) || ' funcionários'
+
+            ],
+
+            'recomendacoes_prioritarias', ARRAY[
+
+                'Implementar programa de prevenção ao assédio e violência',
+
+                'Oferecer orientação financeira e sobre jogos responsáveis',
+
+                'Revisar carga de trabalho e organização das demandas',
+
+                'Fortalecer canais de comunicação e feedback'
+
+            ]
+
+        ) as dados,
+
+        jsonb_build_object(
+
+            'base_analise', 'Respostas com pontuação de risco',
+
+            'criterios', 'Grupos 8,9,10 com scores > limites críticos',
+
+            'urgencia', 'Alta para comportamentos ofensivos'
+
+        ) as metadados
+
+    FROM respostas r
+
+    JOIN avaliacoes a ON r.avaliacao_id = a.id
+
+    JOIN funcionarios f ON a.funcionario_cpf = f.cpf
+
+    LEFT JOIN empresas_clientes ec ON f.empresa_id = ec.id
+
+    WHERE f.clinica_id = p_clinica_id 
+
+        AND (p_empresa_id IS NULL OR ec.id = p_empresa_id)
+
+        AND a.status = 'concluida'
+
+        AND r.grupo IN (8, 9, 10);
+
+        
+
+END;
+
+$$;
 
 ALTER FUNCTION public.gerar_dados_relatorio(p_clinica_id integer, p_template_id integer, p_empresa_id integer, p_data_inicio date, p_data_fim date) OWNER TO postgres;
 
@@ -235,44 +408,79 @@ ALTER FUNCTION public.gerar_dados_relatorio(p_clinica_id integer, p_template_id 
 
 CREATE FUNCTION public.get_resultados_por_empresa(p_clinica_id integer, p_empresa_id integer DEFAULT NULL::integer) RETURNS TABLE(empresa_id integer, empresa_nome character varying, grupo integer, dominio character varying, media_score numeric, categoria character varying, total_respostas bigint)
     LANGUAGE plpgsql
-    AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        ec.id as empresa_id,
-        ec.nome as empresa_nome,
-        r.grupo,
-        CASE r.grupo
-            WHEN 1 THEN 'Demandas no Trabalho'
-            WHEN 2 THEN 'Organização e Conteúdo'
-            WHEN 3 THEN 'Relações Sociais'
-            WHEN 4 THEN 'Liderança'
-            WHEN 5 THEN 'Valores Organizacionais'
-            WHEN 6 THEN 'Saúde e Bem-estar'
-            WHEN 7 THEN 'Comportamentos Ofensivos'
-            WHEN 8 THEN 'Jogos de Azar'
-            WHEN 9 THEN 'Endividamento'
-            ELSE 'Outros'
-        END as dominio,
-        AVG(r.valor) as media_score,
-        CASE 
-            WHEN AVG(r.valor) >= 75 THEN 'alto'
-            WHEN AVG(r.valor) >= 50 THEN 'medio'
-            ELSE 'baixo'
-        END as categoria,
-        COUNT(r.valor) as total_respostas
-    FROM respostas r
-    JOIN avaliacoes a ON r.avaliacao_id = a.id
-    JOIN funcionarios f ON a.funcionario_cpf = f.cpf
-    JOIN empresas_clientes ec ON f.empresa_id = ec.id
-    WHERE f.clinica_id = p_clinica_id
-        AND (p_empresa_id IS NULL OR ec.id = p_empresa_id)
-        AND a.status = 'concluida'
-    GROUP BY ec.id, ec.nome, r.grupo
-    ORDER BY ec.nome, r.grupo;
-END;
-$$;
+    AS $$
 
+BEGIN
+
+    RETURN QUERY
+
+    SELECT 
+
+        ec.id as empresa_id,
+
+        ec.nome as empresa_nome,
+
+        r.grupo,
+
+        CASE r.grupo
+
+            WHEN 1 THEN 'Demandas no Trabalho'
+
+            WHEN 2 THEN 'Organização e Conteúdo'
+
+            WHEN 3 THEN 'Relações Sociais'
+
+            WHEN 4 THEN 'Liderança'
+
+            WHEN 5 THEN 'Valores Organizacionais'
+
+            WHEN 6 THEN 'Saúde e Bem-estar'
+
+            WHEN 7 THEN 'Comportamentos Ofensivos'
+
+            WHEN 8 THEN 'Jogos de Apostas'
+
+            WHEN 9 THEN 'Endividamento'
+
+            ELSE 'Outros'
+
+        END as dominio,
+
+        AVG(r.valor) as media_score,
+
+        CASE 
+
+            WHEN AVG(r.valor) >= 75 THEN 'alto'
+
+            WHEN AVG(r.valor) >= 50 THEN 'medio'
+
+            ELSE 'baixo'
+
+        END as categoria,
+
+        COUNT(r.valor) as total_respostas
+
+    FROM respostas r
+
+    JOIN avaliacoes a ON r.avaliacao_id = a.id
+
+    JOIN funcionarios f ON a.funcionario_cpf = f.cpf
+
+    JOIN empresas_clientes ec ON f.empresa_id = ec.id
+
+    WHERE f.clinica_id = p_clinica_id
+
+        AND (p_empresa_id IS NULL OR ec.id = p_empresa_id)
+
+        AND a.status = 'concluida'
+
+    GROUP BY ec.id, ec.nome, r.grupo
+
+    ORDER BY ec.nome, r.grupo;
+
+END;
+
+$$;
 
 ALTER FUNCTION public.get_resultados_por_empresa(p_clinica_id integer, p_empresa_id integer) OWNER TO postgres;
 
@@ -288,14 +496,13 @@ CREATE TABLE public.analise_estatistica (
     id integer NOT NULL,
     avaliacao_id integer,
     grupo integer,
-    score_original numeric(5,2),
-    score_ajustado numeric(5,2),
+    score_original numeric(5, 2),
+    score_ajustado numeric(5, 2),
     anomalia_detectada boolean DEFAULT false,
     tipo_anomalia character varying(100),
     recomendacao text,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
 );
-
 
 ALTER TABLE public.analise_estatistica OWNER TO postgres;
 
@@ -303,14 +510,9 @@ ALTER TABLE public.analise_estatistica OWNER TO postgres;
 -- Name: analise_estatistica_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE public.analise_estatistica_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
+CREATE SEQUENCE public.analise_estatistica_id_seq AS integer START
+WITH
+    1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
 
 ALTER SEQUENCE public.analise_estatistica_id_seq OWNER TO postgres;
 
@@ -319,7 +521,6 @@ ALTER SEQUENCE public.analise_estatistica_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.analise_estatistica_id_seq OWNED BY public.analise_estatistica.id;
-
 
 --
 -- Name: avaliacoes; Type: TABLE; Schema: public; Owner: postgres
@@ -338,21 +539,15 @@ CREATE TABLE public.avaliacoes (
     CONSTRAINT avaliacoes_status_check CHECK (((status)::text = ANY ((ARRAY['iniciada'::character varying, 'em_andamento'::character varying, 'concluida'::character varying, 'inativada'::character varying])::text[])))
 );
 
-
 ALTER TABLE public.avaliacoes OWNER TO postgres;
 
 --
 -- Name: avaliacoes_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE public.avaliacoes_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
+CREATE SEQUENCE public.avaliacoes_id_seq AS integer START
+WITH
+    1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
 
 ALTER SEQUENCE public.avaliacoes_id_seq OWNER TO postgres;
 
@@ -361,7 +556,6 @@ ALTER SEQUENCE public.avaliacoes_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.avaliacoes_id_seq OWNED BY public.avaliacoes.id;
-
 
 --
 -- Name: clinicas; Type: TABLE; Schema: public; Owner: postgres
@@ -379,7 +573,6 @@ CREATE TABLE public.clinicas (
     atualizado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP
 );
 
-
 ALTER TABLE public.clinicas OWNER TO postgres;
 
 --
@@ -392,15 +585,14 @@ CREATE TABLE public.clinicas_empresas (
     criado_em timestamp without time zone DEFAULT now()
 );
 
-
 ALTER TABLE public.clinicas_empresas OWNER TO postgres;
 
 --
 -- Name: TABLE clinicas_empresas; Type: COMMENT; Schema: public; Owner: postgres
 --
 
-COMMENT ON TABLE public.clinicas_empresas IS 'Relacionamento entre clÃ­nicas de medicina ocupacional e empresas clientes que elas atendem';
-
+COMMENT ON
+TABLE public.clinicas_empresas IS 'Relacionamento entre clÃ­nicas de medicina ocupacional e empresas clientes que elas atendem';
 
 --
 -- Name: COLUMN clinicas_empresas.clinica_id; Type: COMMENT; Schema: public; Owner: postgres
@@ -408,26 +600,19 @@ COMMENT ON TABLE public.clinicas_empresas IS 'Relacionamento entre clÃ­nicas d
 
 COMMENT ON COLUMN public.clinicas_empresas.clinica_id IS 'ID do funcionÃ¡rio RH que representa a clÃ­nica';
 
-
 --
 -- Name: COLUMN clinicas_empresas.empresa_id; Type: COMMENT; Schema: public; Owner: postgres
 --
 
 COMMENT ON COLUMN public.clinicas_empresas.empresa_id IS 'ID da empresa cliente atendida pela clÃ­nica';
 
-
 --
 -- Name: clinicas_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE public.clinicas_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
+CREATE SEQUENCE public.clinicas_id_seq AS integer START
+WITH
+    1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
 
 ALTER SEQUENCE public.clinicas_id_seq OWNER TO postgres;
 
@@ -436,7 +621,6 @@ ALTER SEQUENCE public.clinicas_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.clinicas_id_seq OWNED BY public.clinicas.id;
-
 
 --
 -- Name: empresas_clientes; Type: TABLE; Schema: public; Owner: postgres
@@ -458,21 +642,15 @@ CREATE TABLE public.empresas_clientes (
     atualizado_em timestamp without time zone DEFAULT CURRENT_TIMESTAMP
 );
 
-
 ALTER TABLE public.empresas_clientes OWNER TO postgres;
 
 --
 -- Name: empresas_clientes_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE public.empresas_clientes_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
+CREATE SEQUENCE public.empresas_clientes_id_seq AS integer START
+WITH
+    1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
 
 ALTER SEQUENCE public.empresas_clientes_id_seq OWNER TO postgres;
 
@@ -481,7 +659,6 @@ ALTER SEQUENCE public.empresas_clientes_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.empresas_clientes_id_seq OWNED BY public.empresas_clientes.id;
-
 
 --
 -- Name: funcionarios; Type: TABLE; Schema: public; Owner: postgres
@@ -510,21 +687,15 @@ CREATE TABLE public.funcionarios (
     CONSTRAINT funcionarios_perfil_check CHECK (((perfil)::text = ANY ((ARRAY['funcionario'::character varying, 'rh'::character varying, 'admin'::character varying, 'master'::character varying, 'emissor'::character varying])::text[])))
 );
 
-
 ALTER TABLE public.funcionarios OWNER TO postgres;
 
 --
 -- Name: funcionarios_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE public.funcionarios_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
+CREATE SEQUENCE public.funcionarios_id_seq AS integer START
+WITH
+    1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
 
 ALTER SEQUENCE public.funcionarios_id_seq OWNER TO postgres;
 
@@ -533,7 +704,6 @@ ALTER SEQUENCE public.funcionarios_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.funcionarios_id_seq OWNED BY public.funcionarios.id;
-
 
 --
 -- Name: laudos; Type: TABLE; Schema: public; Owner: postgres
@@ -552,21 +722,15 @@ CREATE TABLE public.laudos (
     CONSTRAINT laudos_status_check CHECK (((status)::text = ANY ((ARRAY['rascunho'::character varying, 'emitido'::character varying, 'enviado'::character varying])::text[])))
 );
 
-
 ALTER TABLE public.laudos OWNER TO postgres;
 
 --
 -- Name: laudos_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE public.laudos_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
+CREATE SEQUENCE public.laudos_id_seq AS integer START
+WITH
+    1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
 
 ALTER SEQUENCE public.laudos_id_seq OWNER TO postgres;
 
@@ -575,7 +739,6 @@ ALTER SEQUENCE public.laudos_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.laudos_id_seq OWNED BY public.laudos.id;
-
 
 --
 -- Name: lotes_avaliacao; Type: TABLE; Schema: public; Owner: postgres
@@ -598,21 +761,15 @@ CREATE TABLE public.lotes_avaliacao (
     CONSTRAINT lotes_avaliacao_tipo_check CHECK (((tipo)::text = ANY ((ARRAY['completo'::character varying, 'operacional'::character varying, 'gestao'::character varying])::text[])))
 );
 
-
 ALTER TABLE public.lotes_avaliacao OWNER TO postgres;
 
 --
 -- Name: lotes_avaliacao_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE public.lotes_avaliacao_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
+CREATE SEQUENCE public.lotes_avaliacao_id_seq AS integer START
+WITH
+    1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
 
 ALTER SEQUENCE public.lotes_avaliacao_id_seq OWNER TO postgres;
 
@@ -621,7 +778,6 @@ ALTER SEQUENCE public.lotes_avaliacao_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.lotes_avaliacao_id_seq OWNED BY public.lotes_avaliacao.id;
-
 
 --
 -- Name: questao_condicoes; Type: TABLE; Schema: public; Owner: postgres
@@ -638,21 +794,15 @@ CREATE TABLE public.questao_condicoes (
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP
 );
 
-
 ALTER TABLE public.questao_condicoes OWNER TO postgres;
 
 --
 -- Name: questao_condicoes_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE public.questao_condicoes_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
+CREATE SEQUENCE public.questao_condicoes_id_seq AS integer START
+WITH
+    1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
 
 ALTER SEQUENCE public.questao_condicoes_id_seq OWNER TO postgres;
 
@@ -661,7 +811,6 @@ ALTER SEQUENCE public.questao_condicoes_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.questao_condicoes_id_seq OWNED BY public.questao_condicoes.id;
-
 
 --
 -- Name: relatorio_templates; Type: TABLE; Schema: public; Owner: postgres
@@ -681,21 +830,15 @@ CREATE TABLE public.relatorio_templates (
     CONSTRAINT relatorio_templates_tipo_check CHECK (((tipo)::text = ANY ((ARRAY['pdf'::character varying, 'excel'::character varying, 'ambos'::character varying])::text[])))
 );
 
-
 ALTER TABLE public.relatorio_templates OWNER TO postgres;
 
 --
 -- Name: relatorio_templates_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE public.relatorio_templates_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
+CREATE SEQUENCE public.relatorio_templates_id_seq AS integer START
+WITH
+    1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
 
 ALTER SEQUENCE public.relatorio_templates_id_seq OWNER TO postgres;
 
@@ -704,7 +847,6 @@ ALTER SEQUENCE public.relatorio_templates_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.relatorio_templates_id_seq OWNED BY public.relatorio_templates.id;
-
 
 --
 -- Name: respostas; Type: TABLE; Schema: public; Owner: postgres
@@ -720,21 +862,15 @@ CREATE TABLE public.respostas (
     CONSTRAINT respostas_valor_check CHECK ((valor = ANY (ARRAY[0, 25, 50, 75, 100])))
 );
 
-
 ALTER TABLE public.respostas OWNER TO postgres;
 
 --
 -- Name: respostas_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE public.respostas_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
+CREATE SEQUENCE public.respostas_id_seq AS integer START
+WITH
+    1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
 
 ALTER SEQUENCE public.respostas_id_seq OWNER TO postgres;
 
@@ -743,7 +879,6 @@ ALTER SEQUENCE public.respostas_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.respostas_id_seq OWNED BY public.respostas.id;
-
 
 --
 -- Name: resultados; Type: TABLE; Schema: public; Owner: postgres
@@ -760,21 +895,15 @@ CREATE TABLE public.resultados (
     CONSTRAINT resultados_categoria_check CHECK (((categoria)::text = ANY ((ARRAY['baixo'::character varying, 'medio'::character varying, 'alto'::character varying])::text[])))
 );
 
-
 ALTER TABLE public.resultados OWNER TO postgres;
 
 --
 -- Name: resultados_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
 --
 
-CREATE SEQUENCE public.resultados_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
+CREATE SEQUENCE public.resultados_id_seq AS integer START
+WITH
+    1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1;
 
 ALTER SEQUENCE public.resultados_id_seq OWNER TO postgres;
 
@@ -783,7 +912,6 @@ ALTER SEQUENCE public.resultados_id_seq OWNER TO postgres;
 --
 
 ALTER SEQUENCE public.resultados_id_seq OWNED BY public.resultados.id;
-
 
 --
 -- Name: vw_analise_grupos_negativos; Type: VIEW; Schema: public; Owner: postgres
@@ -814,7 +942,6 @@ CREATE VIEW public.vw_analise_grupos_negativos AS
    FROM public.analise_estatistica
   GROUP BY grupo
   ORDER BY grupo;
-
 
 ALTER VIEW public.vw_analise_grupos_negativos OWNER TO postgres;
 
@@ -867,7 +994,6 @@ CREATE VIEW public.vw_comparativo_empresas AS
   GROUP BY ec.clinica_id, ec.id, ec.nome
   ORDER BY ec.clinica_id, ec.nome;
 
-
 ALTER VIEW public.vw_comparativo_empresas OWNER TO postgres;
 
 --
@@ -917,7 +1043,6 @@ CREATE VIEW public.vw_dashboard_por_empresa AS
   GROUP BY f.clinica_id, ec.id, ec.nome
   ORDER BY f.clinica_id, ec.nome;
 
-
 ALTER VIEW public.vw_dashboard_por_empresa OWNER TO postgres;
 
 --
@@ -926,13 +1051,11 @@ ALTER VIEW public.vw_dashboard_por_empresa OWNER TO postgres;
 
 ALTER TABLE ONLY public.analise_estatistica ALTER COLUMN id SET DEFAULT nextval('public.analise_estatistica_id_seq'::regclass);
 
-
 --
 -- Name: avaliacoes id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.avaliacoes ALTER COLUMN id SET DEFAULT nextval('public.avaliacoes_id_seq'::regclass);
-
 
 --
 -- Name: clinicas id; Type: DEFAULT; Schema: public; Owner: postgres
@@ -940,13 +1063,11 @@ ALTER TABLE ONLY public.avaliacoes ALTER COLUMN id SET DEFAULT nextval('public.a
 
 ALTER TABLE ONLY public.clinicas ALTER COLUMN id SET DEFAULT nextval('public.clinicas_id_seq'::regclass);
 
-
 --
 -- Name: empresas_clientes id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.empresas_clientes ALTER COLUMN id SET DEFAULT nextval('public.empresas_clientes_id_seq'::regclass);
-
 
 --
 -- Name: funcionarios id; Type: DEFAULT; Schema: public; Owner: postgres
@@ -954,13 +1075,11 @@ ALTER TABLE ONLY public.empresas_clientes ALTER COLUMN id SET DEFAULT nextval('p
 
 ALTER TABLE ONLY public.funcionarios ALTER COLUMN id SET DEFAULT nextval('public.funcionarios_id_seq'::regclass);
 
-
 --
 -- Name: laudos id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.laudos ALTER COLUMN id SET DEFAULT nextval('public.laudos_id_seq'::regclass);
-
 
 --
 -- Name: lotes_avaliacao id; Type: DEFAULT; Schema: public; Owner: postgres
@@ -968,13 +1087,11 @@ ALTER TABLE ONLY public.laudos ALTER COLUMN id SET DEFAULT nextval('public.laudo
 
 ALTER TABLE ONLY public.lotes_avaliacao ALTER COLUMN id SET DEFAULT nextval('public.lotes_avaliacao_id_seq'::regclass);
 
-
 --
 -- Name: questao_condicoes id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.questao_condicoes ALTER COLUMN id SET DEFAULT nextval('public.questao_condicoes_id_seq'::regclass);
-
 
 --
 -- Name: relatorio_templates id; Type: DEFAULT; Schema: public; Owner: postgres
@@ -982,13 +1099,11 @@ ALTER TABLE ONLY public.questao_condicoes ALTER COLUMN id SET DEFAULT nextval('p
 
 ALTER TABLE ONLY public.relatorio_templates ALTER COLUMN id SET DEFAULT nextval('public.relatorio_templates_id_seq'::regclass);
 
-
 --
 -- Name: respostas id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.respostas ALTER COLUMN id SET DEFAULT nextval('public.respostas_id_seq'::regclass);
-
 
 --
 -- Name: resultados id; Type: DEFAULT; Schema: public; Owner: postgres
@@ -996,18 +1111,18 @@ ALTER TABLE ONLY public.respostas ALTER COLUMN id SET DEFAULT nextval('public.re
 
 ALTER TABLE ONLY public.resultados ALTER COLUMN id SET DEFAULT nextval('public.resultados_id_seq'::regclass);
 
-
 --
 -- Data for Name: analise_estatistica; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
+
 COPY public.analise_estatistica (id, avaliacao_id, grupo, score_original, score_ajustado, anomalia_detectada, tipo_anomalia, recomendacao, created_at) FROM stdin;
 \.
-
 
 --
 -- Data for Name: avaliacoes; Type: TABLE DATA; Schema: public; Owner: postgres
 --
+
 
 COPY public.avaliacoes (id, funcionario_cpf, inicio, envio, status, grupo_atual, criado_em, atualizado_em, lote_id) FROM stdin;
 96	45645645645	2025-11-29 12:40:01.616	2025-11-29 10:01:23.734932	concluida	1	2025-11-29 09:40:01.617196	2025-11-29 09:40:01.617196	1
@@ -1038,38 +1153,38 @@ COPY public.avaliacoes (id, funcionario_cpf, inicio, envio, status, grupo_atual,
 121	33333333333	2025-11-30 21:35:14.709	\N	iniciada	1	2025-11-30 18:35:14.713134	2025-11-30 18:35:14.713134	8
 \.
 
-
 --
 -- Data for Name: clinicas; Type: TABLE DATA; Schema: public; Owner: postgres
 --
+
 
 COPY public.clinicas (id, nome, cnpj, email, telefone, endereco, ativa, criado_em, atualizado_em) FROM stdin;
 1	BPS Brasil - Clínica Padrão	12345678000195	contato@bpsbrasil.com.br	\N	\N	t	2025-11-20 22:33:38.735514	2025-11-20 22:33:38.735514
 2	Clinica Acesso	41877577000184	ronaldofilardo@gmail.com	41992415220	Rua Waldemar Kost, 1130 sobrado 2	t	2025-11-21 00:51:45.26533	2025-11-23 10:05:47.430898
 \.
 
-
 --
 -- Data for Name: clinicas_empresas; Type: TABLE DATA; Schema: public; Owner: postgres
 --
+
 
 COPY public.clinicas_empresas (clinica_id, empresa_id, criado_em) FROM stdin;
 5	1	2025-11-29 17:20:10.651511
 \.
 
-
 --
 -- Data for Name: empresas_clientes; Type: TABLE DATA; Schema: public; Owner: postgres
 --
+
 
 COPY public.empresas_clientes (id, nome, cnpj, email, telefone, endereco, cidade, estado, cep, ativa, clinica_id, criado_em, atualizado_em) FROM stdin;
 1	Indústria Metalúrgica São Paulo	11222333000144	contato@metalurgicasp.com.br	\N	\N	\N	\N	\N	t	1	2025-11-20 22:33:39.949474	2025-11-20 22:33:39.949474
 \.
 
-
 --
 -- Data for Name: funcionarios; Type: TABLE DATA; Schema: public; Owner: postgres
 --
+
 
 COPY public.funcionarios (id, cpf, nome, setor, funcao, email, senha_hash, perfil, ativo, criado_em, atualizado_em, clinica_id, empresa_id, matricula, nivel_cargo, turno, escala) FROM stdin;
 20	12312312300	Jose	Produção	Soldador	jose.silva@bps.com	$2a$10$d14TCzVMiPMXLoSeZfNsu.AuR0sK9rNS6Tl6oNBxF2GzjEUGR3onW	funcionario	f	2025-11-29 17:30:17.017885	2025-11-29 17:30:17.017885	1	1	MAT0051	operacional	Manhã	8x40
@@ -1086,10 +1201,10 @@ COPY public.funcionarios (id, cpf, nome, setor, funcao, email, senha_hash, perfi
 28	99999999999	Emissor de Laudos	Emissão	Emissor de Laudos	emissor@bps.com.br	$2a$10$pBBriHjYyOut8y65NMExueCu715E0Pajd9J6yeJQDlo.Nwy9jqQnG	emissor	t	2025-11-29 20:35:59.26376	2025-11-29 20:37:25.616278	1	\N	\N	\N	\N	\N
 \.
 
-
 --
 -- Data for Name: laudos; Type: TABLE DATA; Schema: public; Owner: postgres
 --
+
 
 COPY public.laudos (id, lote_id, emissor_cpf, observacoes, status, criado_em, emitido_em, enviado_em, atualizado_em) FROM stdin;
 1	2	99999999999	teste de anotações.	enviado	2025-11-29 20:54:39.091986	2025-11-29 22:24:27.097033	2025-11-30 00:03:20.560344	2025-11-30 00:03:20.560344
@@ -1098,10 +1213,10 @@ COPY public.laudos (id, lote_id, emissor_cpf, observacoes, status, criado_em, em
 3	3	99999999999	teste de laudo	enviado	2025-11-30 01:01:29.010027	2025-11-30 01:04:44.773982	2025-11-30 17:55:08.029485	2025-11-30 17:55:08.029485
 \.
 
-
 --
 -- Data for Name: lotes_avaliacao; Type: TABLE DATA; Schema: public; Owner: postgres
 --
+
 
 COPY public.lotes_avaliacao (id, codigo, clinica_id, empresa_id, titulo, descricao, tipo, status, liberado_por, liberado_em, criado_em, atualizado_em) FROM stdin;
 1	001-291125	1	1	002	teste	completo	concluido	11111111111	2025-11-29 09:40:01.603255	2025-11-29 09:40:01.603255	2025-11-29 09:40:01.603255
@@ -1114,10 +1229,10 @@ COPY public.lotes_avaliacao (id, codigo, clinica_id, empresa_id, titulo, descric
 8	006-301125	1	1	2	Lote liberado automaticamente para Indústria Metalúrgica São Paulo	completo	ativo	11111111111	2025-11-30 18:35:14.706381	2025-11-30 18:35:14.706381	2025-11-30 18:35:14.706381
 \.
 
-
 --
 -- Data for Name: questao_condicoes; Type: TABLE DATA; Schema: public; Owner: postgres
 --
+
 
 COPY public.questao_condicoes (id, questao_id, questao_dependente, operador, valor_condicao, categoria, ativo, created_at) FROM stdin;
 1	60	59	gt	0	behavioral	t	2025-11-20 18:22:21.853497
@@ -1134,10 +1249,10 @@ COPY public.questao_condicoes (id, questao_id, questao_dependente, operador, val
 12	58	56	gt	0	behavioral	t	2025-11-20 18:22:21.859613
 \.
 
-
 --
 -- Data for Name: relatorio_templates; Type: TABLE DATA; Schema: public; Owner: postgres
 --
+
 
 COPY public.relatorio_templates (id, nome, tipo, descricao, campos_incluidos, filtros_padrao, formato_saida, ativo, created_at, updated_at) FROM stdin;
 1	Relatório Executivo COPSOQ-III	pdf	Relatório executivo com principais indicadores	{"grupos": [1, 2, 3, 4, 5, 6], "graficos": ["barras", "pizza"], "estatisticas": true, "recomendacoes": true}	{"status": ["concluida"], "periodo": "ultimo_mes"}	A4	t	2025-11-20 18:30:31.314946	2025-11-20 18:30:31.314946
@@ -1146,10 +1261,10 @@ COPY public.relatorio_templates (id, nome, tipo, descricao, campos_incluidos, fi
 4	Relatório Comportamental	pdf	Foco em questões comportamentais (jogos, violência, endividamento)	{"grupos": [8, 9, 10], "alertas_criticos": true, "recomendacoes_especializadas": true}	{"nivel_alerta": "alto", "apenas_respostas_positivas": true}	A4	t	2025-11-20 18:30:31.314946	2025-11-20 18:30:31.314946
 \.
 
-
 --
 -- Data for Name: respostas; Type: TABLE DATA; Schema: public; Owner: postgres
 --
+
 
 COPY public.respostas (id, avaliacao_id, grupo, item, valor, criado_em) FROM stdin;
 5875	96	1	Q1	0	2025-11-29 10:00:59.267627
@@ -1746,10 +1861,10 @@ COPY public.respostas (id, avaliacao_id, grupo, item, valor, criado_em) FROM std
 6466	119	10	Q70	25	2025-11-30 18:33:34.725846
 \.
 
-
 --
 -- Data for Name: resultados; Type: TABLE DATA; Schema: public; Owner: postgres
 --
+
 
 COPY public.resultados (id, avaliacao_id, grupo, dominio, score, categoria, criado_em) FROM stdin;
 861	96	1	Demandas no Trabalho	62.50	medio	2025-11-29 10:01:23.716304
@@ -1914,243 +2029,217 @@ COPY public.resultados (id, avaliacao_id, grupo, dominio, score, categoria, cria
 1020	119	10	Endividamento Financeiro	37.50	medio	2025-11-30 18:33:34.761397
 \.
 
-
 --
 -- Name: analise_estatistica_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.analise_estatistica_id_seq', 7, true);
-
+SELECT pg_catalog.setval (
+        'public.analise_estatistica_id_seq', 7, true
+    );
 
 --
 -- Name: avaliacoes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.avaliacoes_id_seq', 121, true);
-
+SELECT pg_catalog.setval ( 'public.avaliacoes_id_seq', 121, true );
 
 --
 -- Name: clinicas_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.clinicas_id_seq', 2, true);
-
+SELECT pg_catalog.setval ( 'public.clinicas_id_seq', 2, true );
 
 --
 -- Name: empresas_clientes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.empresas_clientes_id_seq', 1, true);
-
+SELECT pg_catalog.setval ( 'public.empresas_clientes_id_seq', 1, true );
 
 --
 -- Name: funcionarios_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.funcionarios_id_seq', 38, true);
-
+SELECT pg_catalog.setval ( 'public.funcionarios_id_seq', 38, true );
 
 --
 -- Name: laudos_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.laudos_id_seq', 4, true);
-
+SELECT pg_catalog.setval ( 'public.laudos_id_seq', 4, true );
 
 --
 -- Name: lotes_avaliacao_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.lotes_avaliacao_id_seq', 8, true);
-
+SELECT pg_catalog.setval ( 'public.lotes_avaliacao_id_seq', 8, true );
 
 --
 -- Name: questao_condicoes_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.questao_condicoes_id_seq', 12, true);
-
+SELECT pg_catalog.setval (
+        'public.questao_condicoes_id_seq', 12, true
+    );
 
 --
 -- Name: relatorio_templates_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.relatorio_templates_id_seq', 4, true);
-
+SELECT pg_catalog.setval (
+        'public.relatorio_templates_id_seq', 4, true
+    );
 
 --
 -- Name: respostas_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.respostas_id_seq', 6466, true);
-
+SELECT pg_catalog.setval ( 'public.respostas_id_seq', 6466, true );
 
 --
 -- Name: resultados_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
 --
 
-SELECT pg_catalog.setval('public.resultados_id_seq', 1020, true);
-
+SELECT pg_catalog.setval ( 'public.resultados_id_seq', 1020, true );
 
 --
 -- Name: analise_estatistica analise_estatistica_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.analise_estatistica
-    ADD CONSTRAINT analise_estatistica_pkey PRIMARY KEY (id);
-
+ADD CONSTRAINT analise_estatistica_pkey PRIMARY KEY (id);
 
 --
 -- Name: avaliacoes avaliacoes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.avaliacoes
-    ADD CONSTRAINT avaliacoes_pkey PRIMARY KEY (id);
-
+ADD CONSTRAINT avaliacoes_pkey PRIMARY KEY (id);
 
 --
 -- Name: clinicas clinicas_cnpj_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.clinicas
-    ADD CONSTRAINT clinicas_cnpj_key UNIQUE (cnpj);
-
+ADD CONSTRAINT clinicas_cnpj_key UNIQUE (cnpj);
 
 --
 -- Name: clinicas_empresas clinicas_empresas_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.clinicas_empresas
-    ADD CONSTRAINT clinicas_empresas_pkey PRIMARY KEY (clinica_id, empresa_id);
-
+ADD CONSTRAINT clinicas_empresas_pkey PRIMARY KEY (clinica_id, empresa_id);
 
 --
 -- Name: clinicas clinicas_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.clinicas
-    ADD CONSTRAINT clinicas_pkey PRIMARY KEY (id);
-
+ADD CONSTRAINT clinicas_pkey PRIMARY KEY (id);
 
 --
 -- Name: empresas_clientes empresas_clientes_cnpj_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.empresas_clientes
-    ADD CONSTRAINT empresas_clientes_cnpj_key UNIQUE (cnpj);
-
+ADD CONSTRAINT empresas_clientes_cnpj_key UNIQUE (cnpj);
 
 --
 -- Name: empresas_clientes empresas_clientes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.empresas_clientes
-    ADD CONSTRAINT empresas_clientes_pkey PRIMARY KEY (id);
-
+ADD CONSTRAINT empresas_clientes_pkey PRIMARY KEY (id);
 
 --
 -- Name: funcionarios funcionarios_cpf_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.funcionarios
-    ADD CONSTRAINT funcionarios_cpf_key UNIQUE (cpf);
-
+ADD CONSTRAINT funcionarios_cpf_key UNIQUE (cpf);
 
 --
 -- Name: funcionarios funcionarios_matricula_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.funcionarios
-    ADD CONSTRAINT funcionarios_matricula_key UNIQUE (matricula);
-
+ADD CONSTRAINT funcionarios_matricula_key UNIQUE (matricula);
 
 --
 -- Name: funcionarios funcionarios_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.funcionarios
-    ADD CONSTRAINT funcionarios_pkey PRIMARY KEY (id);
-
+ADD CONSTRAINT funcionarios_pkey PRIMARY KEY (id);
 
 --
 -- Name: laudos laudos_lote_emissor_unique; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.laudos
-    ADD CONSTRAINT laudos_lote_emissor_unique UNIQUE (lote_id, emissor_cpf);
-
+ADD CONSTRAINT laudos_lote_emissor_unique UNIQUE (lote_id, emissor_cpf);
 
 --
 -- Name: laudos laudos_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.laudos
-    ADD CONSTRAINT laudos_pkey PRIMARY KEY (id);
-
+ADD CONSTRAINT laudos_pkey PRIMARY KEY (id);
 
 --
 -- Name: lotes_avaliacao lotes_avaliacao_codigo_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.lotes_avaliacao
-    ADD CONSTRAINT lotes_avaliacao_codigo_key UNIQUE (codigo);
-
+ADD CONSTRAINT lotes_avaliacao_codigo_key UNIQUE (codigo);
 
 --
 -- Name: lotes_avaliacao lotes_avaliacao_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.lotes_avaliacao
-    ADD CONSTRAINT lotes_avaliacao_pkey PRIMARY KEY (id);
-
+ADD CONSTRAINT lotes_avaliacao_pkey PRIMARY KEY (id);
 
 --
 -- Name: questao_condicoes questao_condicoes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.questao_condicoes
-    ADD CONSTRAINT questao_condicoes_pkey PRIMARY KEY (id);
-
+ADD CONSTRAINT questao_condicoes_pkey PRIMARY KEY (id);
 
 --
 -- Name: relatorio_templates relatorio_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.relatorio_templates
-    ADD CONSTRAINT relatorio_templates_pkey PRIMARY KEY (id);
-
+ADD CONSTRAINT relatorio_templates_pkey PRIMARY KEY (id);
 
 --
 -- Name: respostas respostas_avaliacao_id_grupo_item_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.respostas
-    ADD CONSTRAINT respostas_avaliacao_id_grupo_item_key UNIQUE (avaliacao_id, grupo, item);
-
+ADD CONSTRAINT respostas_avaliacao_id_grupo_item_key UNIQUE (avaliacao_id, grupo, item);
 
 --
 -- Name: respostas respostas_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.respostas
-    ADD CONSTRAINT respostas_pkey PRIMARY KEY (id);
-
+ADD CONSTRAINT respostas_pkey PRIMARY KEY (id);
 
 --
 -- Name: resultados resultados_avaliacao_id_grupo_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.resultados
-    ADD CONSTRAINT resultados_avaliacao_id_grupo_key UNIQUE (avaliacao_id, grupo);
-
+ADD CONSTRAINT resultados_avaliacao_id_grupo_key UNIQUE (avaliacao_id, grupo);
 
 --
 -- Name: resultados resultados_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.resultados
-    ADD CONSTRAINT resultados_pkey PRIMARY KEY (id);
-
+ADD CONSTRAINT resultados_pkey PRIMARY KEY (id);
 
 --
 -- Name: idx_avaliacoes_funcionario; Type: INDEX; Schema: public; Owner: postgres
@@ -2158,13 +2247,11 @@ ALTER TABLE ONLY public.resultados
 
 CREATE INDEX idx_avaliacoes_funcionario ON public.avaliacoes USING btree (funcionario_cpf);
 
-
 --
 -- Name: idx_avaliacoes_lote; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_avaliacoes_lote ON public.avaliacoes USING btree (lote_id);
-
 
 --
 -- Name: idx_avaliacoes_status; Type: INDEX; Schema: public; Owner: postgres
@@ -2172,13 +2259,11 @@ CREATE INDEX idx_avaliacoes_lote ON public.avaliacoes USING btree (lote_id);
 
 CREATE INDEX idx_avaliacoes_status ON public.avaliacoes USING btree (status);
 
-
 --
 -- Name: idx_clinicas_empresas_clinica; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_clinicas_empresas_clinica ON public.clinicas_empresas USING btree (clinica_id);
-
 
 --
 -- Name: idx_clinicas_empresas_empresa; Type: INDEX; Schema: public; Owner: postgres
@@ -2186,13 +2271,11 @@ CREATE INDEX idx_clinicas_empresas_clinica ON public.clinicas_empresas USING btr
 
 CREATE INDEX idx_clinicas_empresas_empresa ON public.clinicas_empresas USING btree (empresa_id);
 
-
 --
 -- Name: idx_empresas_ativa; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_empresas_ativa ON public.empresas_clientes USING btree (ativa);
-
 
 --
 -- Name: idx_empresas_clinica; Type: INDEX; Schema: public; Owner: postgres
@@ -2200,13 +2283,11 @@ CREATE INDEX idx_empresas_ativa ON public.empresas_clientes USING btree (ativa);
 
 CREATE INDEX idx_empresas_clinica ON public.empresas_clientes USING btree (clinica_id);
 
-
 --
 -- Name: idx_empresas_cnpj; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_empresas_cnpj ON public.empresas_clientes USING btree (cnpj);
-
 
 --
 -- Name: idx_funcionarios_clinica; Type: INDEX; Schema: public; Owner: postgres
@@ -2214,13 +2295,11 @@ CREATE INDEX idx_empresas_cnpj ON public.empresas_clientes USING btree (cnpj);
 
 CREATE INDEX idx_funcionarios_clinica ON public.funcionarios USING btree (clinica_id);
 
-
 --
 -- Name: idx_funcionarios_empresa; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_funcionarios_empresa ON public.funcionarios USING btree (empresa_id);
-
 
 --
 -- Name: idx_funcionarios_matricula; Type: INDEX; Schema: public; Owner: postgres
@@ -2228,13 +2307,11 @@ CREATE INDEX idx_funcionarios_empresa ON public.funcionarios USING btree (empres
 
 CREATE INDEX idx_funcionarios_matricula ON public.funcionarios USING btree (matricula);
 
-
 --
 -- Name: idx_funcionarios_nivel_cargo; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_funcionarios_nivel_cargo ON public.funcionarios USING btree (nivel_cargo);
-
 
 --
 -- Name: idx_laudos_emissor; Type: INDEX; Schema: public; Owner: postgres
@@ -2242,13 +2319,11 @@ CREATE INDEX idx_funcionarios_nivel_cargo ON public.funcionarios USING btree (ni
 
 CREATE INDEX idx_laudos_emissor ON public.laudos USING btree (emissor_cpf);
 
-
 --
 -- Name: idx_laudos_lote; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_laudos_lote ON public.laudos USING btree (lote_id);
-
 
 --
 -- Name: idx_laudos_status; Type: INDEX; Schema: public; Owner: postgres
@@ -2256,13 +2331,11 @@ CREATE INDEX idx_laudos_lote ON public.laudos USING btree (lote_id);
 
 CREATE INDEX idx_laudos_status ON public.laudos USING btree (status);
 
-
 --
 -- Name: idx_lotes_clinica; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_lotes_clinica ON public.lotes_avaliacao USING btree (clinica_id);
-
 
 --
 -- Name: idx_lotes_codigo; Type: INDEX; Schema: public; Owner: postgres
@@ -2270,13 +2343,11 @@ CREATE INDEX idx_lotes_clinica ON public.lotes_avaliacao USING btree (clinica_id
 
 CREATE INDEX idx_lotes_codigo ON public.lotes_avaliacao USING btree (codigo);
 
-
 --
 -- Name: idx_lotes_empresa; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_lotes_empresa ON public.lotes_avaliacao USING btree (empresa_id);
-
 
 --
 -- Name: idx_lotes_status; Type: INDEX; Schema: public; Owner: postgres
@@ -2284,13 +2355,11 @@ CREATE INDEX idx_lotes_empresa ON public.lotes_avaliacao USING btree (empresa_id
 
 CREATE INDEX idx_lotes_status ON public.lotes_avaliacao USING btree (status);
 
-
 --
 -- Name: idx_questao_condicoes_dependente; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_questao_condicoes_dependente ON public.questao_condicoes USING btree (questao_dependente);
-
 
 --
 -- Name: idx_questao_condicoes_questao; Type: INDEX; Schema: public; Owner: postgres
@@ -2298,13 +2367,11 @@ CREATE INDEX idx_questao_condicoes_dependente ON public.questao_condicoes USING 
 
 CREATE INDEX idx_questao_condicoes_questao ON public.questao_condicoes USING btree (questao_id);
 
-
 --
 -- Name: idx_respostas_avaliacao; Type: INDEX; Schema: public; Owner: postgres
 --
 
 CREATE INDEX idx_respostas_avaliacao ON public.respostas USING btree (avaliacao_id);
-
 
 --
 -- Name: idx_resultados_avaliacao; Type: INDEX; Schema: public; Owner: postgres
@@ -2312,136 +2379,118 @@ CREATE INDEX idx_respostas_avaliacao ON public.respostas USING btree (avaliacao_
 
 CREATE INDEX idx_resultados_avaliacao ON public.resultados USING btree (avaliacao_id);
 
-
 --
 -- Name: avaliacoes avaliacoes_funcionario_cpf_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.avaliacoes
-    ADD CONSTRAINT avaliacoes_funcionario_cpf_fkey FOREIGN KEY (funcionario_cpf) REFERENCES public.funcionarios(cpf) ON DELETE CASCADE;
-
+ADD CONSTRAINT avaliacoes_funcionario_cpf_fkey FOREIGN KEY (funcionario_cpf) REFERENCES public.funcionarios (cpf) ON DELETE CASCADE;
 
 --
 -- Name: avaliacoes avaliacoes_lote_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.avaliacoes
-    ADD CONSTRAINT avaliacoes_lote_id_fkey FOREIGN KEY (lote_id) REFERENCES public.lotes_avaliacao(id) ON DELETE SET NULL;
-
+ADD CONSTRAINT avaliacoes_lote_id_fkey FOREIGN KEY (lote_id) REFERENCES public.lotes_avaliacao (id) ON DELETE SET NULL;
 
 --
 -- Name: clinicas_empresas clinicas_empresas_clinica_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.clinicas_empresas
-    ADD CONSTRAINT clinicas_empresas_clinica_id_fkey FOREIGN KEY (clinica_id) REFERENCES public.funcionarios(id) ON DELETE CASCADE;
-
+ADD CONSTRAINT clinicas_empresas_clinica_id_fkey FOREIGN KEY (clinica_id) REFERENCES public.funcionarios (id) ON DELETE CASCADE;
 
 --
 -- Name: clinicas_empresas clinicas_empresas_empresa_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.clinicas_empresas
-    ADD CONSTRAINT clinicas_empresas_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas_clientes(id) ON DELETE CASCADE;
-
+ADD CONSTRAINT clinicas_empresas_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas_clientes (id) ON DELETE CASCADE;
 
 --
 -- Name: empresas_clientes empresas_clientes_clinica_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.empresas_clientes
-    ADD CONSTRAINT empresas_clientes_clinica_id_fkey FOREIGN KEY (clinica_id) REFERENCES public.clinicas(id) ON DELETE CASCADE;
-
+ADD CONSTRAINT empresas_clientes_clinica_id_fkey FOREIGN KEY (clinica_id) REFERENCES public.clinicas (id) ON DELETE CASCADE;
 
 --
 -- Name: funcionarios funcionarios_clinica_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.funcionarios
-    ADD CONSTRAINT funcionarios_clinica_id_fkey FOREIGN KEY (clinica_id) REFERENCES public.clinicas(id);
-
+ADD CONSTRAINT funcionarios_clinica_id_fkey FOREIGN KEY (clinica_id) REFERENCES public.clinicas (id);
 
 --
 -- Name: funcionarios funcionarios_empresa_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.funcionarios
-    ADD CONSTRAINT funcionarios_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas_clientes(id) ON DELETE SET NULL;
-
+ADD CONSTRAINT funcionarios_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas_clientes (id) ON DELETE SET NULL;
 
 --
 -- Name: laudos laudos_emissor_cpf_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.laudos
-    ADD CONSTRAINT laudos_emissor_cpf_fkey FOREIGN KEY (emissor_cpf) REFERENCES public.funcionarios(cpf);
-
+ADD CONSTRAINT laudos_emissor_cpf_fkey FOREIGN KEY (emissor_cpf) REFERENCES public.funcionarios (cpf);
 
 --
 -- Name: laudos laudos_emissor_cpf_fkey1; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.laudos
-    ADD CONSTRAINT laudos_emissor_cpf_fkey1 FOREIGN KEY (emissor_cpf) REFERENCES public.funcionarios(cpf);
-
+ADD CONSTRAINT laudos_emissor_cpf_fkey1 FOREIGN KEY (emissor_cpf) REFERENCES public.funcionarios (cpf);
 
 --
 -- Name: laudos laudos_lote_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.laudos
-    ADD CONSTRAINT laudos_lote_id_fkey FOREIGN KEY (lote_id) REFERENCES public.lotes_avaliacao(id) ON DELETE CASCADE;
-
+ADD CONSTRAINT laudos_lote_id_fkey FOREIGN KEY (lote_id) REFERENCES public.lotes_avaliacao (id) ON DELETE CASCADE;
 
 --
 -- Name: lotes_avaliacao lotes_avaliacao_clinica_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.lotes_avaliacao
-    ADD CONSTRAINT lotes_avaliacao_clinica_id_fkey FOREIGN KEY (clinica_id) REFERENCES public.clinicas(id) ON DELETE CASCADE;
-
+ADD CONSTRAINT lotes_avaliacao_clinica_id_fkey FOREIGN KEY (clinica_id) REFERENCES public.clinicas (id) ON DELETE CASCADE;
 
 --
 -- Name: lotes_avaliacao lotes_avaliacao_empresa_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.lotes_avaliacao
-    ADD CONSTRAINT lotes_avaliacao_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas_clientes(id) ON DELETE CASCADE;
-
+ADD CONSTRAINT lotes_avaliacao_empresa_id_fkey FOREIGN KEY (empresa_id) REFERENCES public.empresas_clientes (id) ON DELETE CASCADE;
 
 --
 -- Name: lotes_avaliacao lotes_avaliacao_liberado_por_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.lotes_avaliacao
-    ADD CONSTRAINT lotes_avaliacao_liberado_por_fkey FOREIGN KEY (liberado_por) REFERENCES public.funcionarios(cpf);
-
+ADD CONSTRAINT lotes_avaliacao_liberado_por_fkey FOREIGN KEY (liberado_por) REFERENCES public.funcionarios (cpf);
 
 --
 -- Name: lotes_avaliacao lotes_avaliacao_liberado_por_fkey1; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.lotes_avaliacao
-    ADD CONSTRAINT lotes_avaliacao_liberado_por_fkey1 FOREIGN KEY (liberado_por) REFERENCES public.funcionarios(cpf);
-
+ADD CONSTRAINT lotes_avaliacao_liberado_por_fkey1 FOREIGN KEY (liberado_por) REFERENCES public.funcionarios (cpf);
 
 --
 -- Name: respostas respostas_avaliacao_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.respostas
-    ADD CONSTRAINT respostas_avaliacao_id_fkey FOREIGN KEY (avaliacao_id) REFERENCES public.avaliacoes(id) ON DELETE CASCADE;
-
+ADD CONSTRAINT respostas_avaliacao_id_fkey FOREIGN KEY (avaliacao_id) REFERENCES public.avaliacoes (id) ON DELETE CASCADE;
 
 --
 -- Name: resultados resultados_avaliacao_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
 --
 
 ALTER TABLE ONLY public.resultados
-    ADD CONSTRAINT resultados_avaliacao_id_fkey FOREIGN KEY (avaliacao_id) REFERENCES public.avaliacoes(id) ON DELETE CASCADE;
-
+ADD CONSTRAINT resultados_avaliacao_id_fkey FOREIGN KEY (avaliacao_id) REFERENCES public.avaliacoes (id) ON DELETE CASCADE;
 
 --
 -- PostgreSQL database dump complete
 --
-

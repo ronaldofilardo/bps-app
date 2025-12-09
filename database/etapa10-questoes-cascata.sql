@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS questao_condicoes (
 );
 
 -- 2. Inserir condições para questões comportamentais específicas
--- Questões de jogos de azar (59-64) só aparecem se Q59 > 0
+-- Questões de Jogos de Apostas (59-64) só aparecem se Q59 > 0
 INSERT INTO
     questao_condicoes (
         questao_id,
@@ -92,7 +92,7 @@ SELECT
     qc.valor_condicao,
     qc.categoria,
     CASE
-        WHEN qc.questao_id BETWEEN 59 AND 64  THEN 'Jogos de Azar'
+        WHEN qc.questao_id BETWEEN 59 AND 64  THEN 'Jogos de Apostas'
         WHEN qc.questao_id BETWEEN 65 AND 70  THEN 'Endividamento'
         WHEN qc.questao_id BETWEEN 57 AND 58  THEN 'Violência'
         ELSE 'Core'

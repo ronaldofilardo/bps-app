@@ -76,7 +76,7 @@
    - Demandas no Trabalho
    - Saúde e Bem-Estar
    - Comportamentos Ofensivos
-   - Jogos de Azar
+   - Jogos de Apostas
    - Endividamento
 
    **Domínios Positivos** (quanto maior, melhor):

@@ -70,10 +70,21 @@ export default function AdminPage() {
 
     setUploading(true)
     try {
-      const text = await file.text()
+      // Ler arquivo como array buffer para detectar encoding
+      const arrayBuffer = await file.arrayBuffer()
+      let text = new TextDecoder('utf-8').decode(arrayBuffer)
+
+      // Remover BOM UTF-8 se presente
+      text = text.replace(/^\uFEFF/, '')
+
+      // Se detectar caracteres garbled (Ã), tentar Latin-1
+      if (text.includes('Ã')) {
+        text = new TextDecoder('latin1').decode(arrayBuffer)
+      }
+
       const lines = text.split('\n').filter(line => line.trim())
       const headers = lines[0].split(',').map(h => h.trim())
-      
+
       const funcionariosImport = lines.slice(1).map(line => {
         const values = line.split(',').map(v => v.trim())
         const obj: any = {}
@@ -83,10 +94,17 @@ export default function AdminPage() {
         return obj
       })
 
+      // Usar empresa_id do primeiro funcionário (assumindo que todos são da mesma empresa)
+      const empresaId = funcionariosImport[0]?.empresa_id
+      if (!empresaId) {
+        alert('Erro: empresa_id não encontrado no arquivo CSV')
+        return
+      }
+
       const response = await fetch('/api/admin/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ funcionarios: funcionariosImport }),
+        body: JSON.stringify({ funcionarios: funcionariosImport, empresa_id: empresaId }),
       })
 
       const result = await response.json()

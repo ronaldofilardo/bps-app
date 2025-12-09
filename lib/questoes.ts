@@ -130,10 +130,10 @@ export const grupos: GrupoAvaliacao[] = [
     id: 9,
     titulo: 'Grupo 9 - Jogos de Apostas',
     dominio: 'Comportamento de Jogo',
-    descricao: 'Avaliação de comportamentos relacionados a jogos de azar',
+    descricao: 'Avaliação de comportamentos relacionados a Jogos de Apostas',
     tipo: 'negativa',
     itens: [
-      { id: 'Q59', texto: 'Você fez apostas em jogos de azar (bet, loteria, jogo do bicho, cassino online etc.)?', textoGestao: 'Você realizou apostas em jogos de azar (ex.: apostas esportivas, loterias, jogo do bicho, cassinos online)?' },
+      { id: 'Q59', texto: 'Você fez apostas em Jogos de Apostas (bet, loteria, jogo do bicho, cassino online etc.)?', textoGestao: 'Você realizou apostas em Jogos de Apostas (ex.: apostas esportivas, loterias, jogo do bicho, cassinos online)?' },
       { id: 'Q61', texto: 'Mesmo perdendo dinheiro, você continuou apostando?', textoGestao: 'Você persistiu nas apostas mesmo após perdas financeiras?' },
       { id: 'Q62', texto: 'Pensar em apostas atrapalhou seu rendimento no trabalho?', textoGestao: 'Os pensamentos sobre apostas prejudicaram seu desempenho profissional?' },
       { id: 'Q64', texto: 'Você usou o celular ou horário de trabalho pra fazer apostas?', textoGestao: 'Você utilizou tempo de trabalho (celular, intervalos) para realizar apostas?' },

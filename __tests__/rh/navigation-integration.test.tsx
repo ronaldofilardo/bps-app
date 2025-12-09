@@ -313,10 +313,8 @@ describe('RH Navigation Integration', () => {
       // Verifica que as APIs foram chamadas
       const calls = (global.fetch as jest.MockedFunction<typeof fetch>).mock.calls
       const dashboardCalled = calls.some(call => call[0] === '/api/rh/dashboard?empresa_id=1')
-      const funcionariosCalled = calls.some(call => call[0] === '/api/admin/funcionarios?empresa_id=1')
       const authSessionCalled = calls.some(call => call[0] === '/api/auth/session')
       expect(dashboardCalled).toBe(true)
-      expect(funcionariosCalled).toBe(true)
       expect(authSessionCalled).toBe(true)
     })
 

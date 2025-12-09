@@ -69,10 +69,10 @@ function tratarGrupoEspecifico(
       }
       break
 
-    case 9: // Jogos de Azar
+    case 9: // Jogos de Apostas
       // Pontuações altas precisam atenção especial
       if (score > 50) {
-        console.warn('Alto risco de jogos de azar detectado')
+        console.warn('Alto risco de Jogos de Apostas detectado')
       }
       break
 
