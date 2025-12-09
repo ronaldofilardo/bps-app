@@ -64,6 +64,10 @@ export async function query<T = any>(
       }
     } else if (isProduction && neonSql) {
       // Neon Database (Produção)
+      // Garantir search_path em produção
+      if (!text.trim().toLowerCase().startsWith('set search_path')) {
+        await neonSql('SET search_path TO public;')
+      }
       const rows = await neonSql(text, params || [])
       const duration = Date.now() - start
       console.log(`[DEBUG] Query Neon (${duration}ms): ${text.substring(0, 100)}...`)

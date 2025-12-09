@@ -137,16 +137,28 @@ export default function EmpresaDashboardPage() {
           return
         }
         const sessionData = await sessionRes.json()
+
+        // Verificar perfil
+        if (sessionData.perfil !== 'rh' && sessionData.perfil !== 'admin') {
+          router.push('/dashboard')
+          return
+        }
+
         setSession(sessionData)
 
-        // Só carregar dados se houver sessão
-        await loadEmpresa()
-        await fetchFuncionarios(empresaId, sessionData.perfil)
-        await fetchLotesRecentes()
-        await fetchLaudos()
+        // Carregar todos os dados em paralelo
+        await Promise.all([
+          loadEmpresa(),
+          fetchDashboardData(),
+          fetchFuncionarios(empresaId, sessionData.perfil),
+          fetchLotesRecentes(),
+          fetchLaudos()
+        ])
       } catch (error) {
         console.error('Erro ao verificar sessão:', error)
         router.push('/login')
+      } finally {
+        setLoading(false)
       }
     }
     checkSessionAndLoad()
@@ -170,6 +182,18 @@ export default function EmpresaDashboardPage() {
       }
     } catch (error) {
       console.error('Erro ao carregar empresa:', error)
+    }
+  }
+
+  const fetchDashboardData = async () => {
+    try {
+      const dashboardRes = await fetch(`/api/rh/dashboard?empresa_id=${empresaId}`)
+      if (dashboardRes.ok) {
+        const dashboardData = await dashboardRes.json()
+        setData(dashboardData)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dashboard:', error)
     }
   }
 
