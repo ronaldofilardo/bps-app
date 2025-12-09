@@ -141,7 +141,7 @@ export default function EmpresaDashboardPage() {
 
         // Só carregar dados se houver sessão
         await loadEmpresa()
-        await fetchData()
+        await fetchFuncionarios(empresaId, sessionData.session.perfil)
         await fetchLotesRecentes()
         await fetchLaudos()
       } catch (error) {
