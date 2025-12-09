@@ -2,7 +2,7 @@
 # Uso: ./sync-neon-db.ps1
 
 $schemaPath = "database/schema-clean-final.sql"
-$connString = "postgresql://neondb_owner:npg_8FNwPWA2mpcl@ep-holy-math-ac17vhfi-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+$connString = "postgresql://neondb_owner:npg_NfJGO8vck9ob@ep-steep-credit-acckkvg4-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
 
 # Verifica se o psql está disponível
 if (-not (Get-Command psql -ErrorAction SilentlyContinue)) {
@@ -17,7 +17,7 @@ if (-not (Test-Path $schemaPath)) {
 
 Write-Host "Aplicando $schemaPath no banco Neon..."
 
-$env:PGPASSWORD = "npg_8FNwPWA2mpcl"
+$env:PGPASSWORD = "npg_NfJGO8vck9ob"
 psql $connString -f $schemaPath
 
 if ($LASTEXITCODE -eq 0) {

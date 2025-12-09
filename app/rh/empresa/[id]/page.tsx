@@ -154,11 +154,11 @@ export default function EmpresaDashboardPage() {
 
   // Carregar funcionários quando a aba é ativada
   useEffect(() => {
-    if (empresaId) {
-      fetchFuncionarios(empresaId)
+    if (empresaId && session) {
+      fetchFuncionarios(empresaId, session.perfil)
       setSelectedFuncionarios([]) // Limpar seleção ao carregar
     }
-  }, [empresaId])
+  }, [empresaId, session])
 
   const loadEmpresa = async () => {
     try {
@@ -368,7 +368,7 @@ export default function EmpresaDashboardPage() {
       if (response.ok && result.success) {
         alert(result.message)
         // Recarregar funcionários
-        await fetchFuncionarios(empresaId)
+        await fetchFuncionarios(empresaId, session?.perfil)
       } else {
         alert('Erro: ' + (result.error || 'Erro desconhecido'))
       }
