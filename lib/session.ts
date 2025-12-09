@@ -16,7 +16,7 @@ export async function createSession(session: Session): Promise<void> {
   // Cookie httpOnly, secure, sameSite
   cookieStore.set('bps-session', JSON.stringify(session), {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.VERCEL === '1', // Secure apenas no Vercel (produção)
     sameSite: 'lax',
     maxAge: 60 * 60 * 8, // 8 horas
     path: '/',
