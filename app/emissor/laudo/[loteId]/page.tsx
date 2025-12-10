@@ -80,6 +80,29 @@ export default function EditarLaudo() {
     }
 
     try {
+      // Primeiro, gerar o PDF para verificar se funciona
+      toast.loading('Gerando PDF do laudo...', { id: 'emitir-laudo' })
+
+      const pdfResponse = await fetch(`/api/emissor/laudos/${loteId}/pdf`)
+      if (!pdfResponse.ok) {
+        const errorData = await pdfResponse.json()
+        toast.dismiss('emitir-laudo')
+        toast.error(errorData.error || 'Erro ao gerar PDF do laudo')
+        return
+      }
+
+      // Se o PDF foi gerado com sucesso, criar blob e fazer download
+      const blob = await pdfResponse.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `laudo-${lote?.codigo || loteId}-${Date.now()}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+
+      // Só então emitir o laudo (mudar status)
       const response = await fetch(`/api/emissor/laudos/${loteId}`, {
         method: 'POST',
       })
@@ -87,12 +110,15 @@ export default function EditarLaudo() {
       const data = await response.json()
 
       if (data.success) {
-        toast.success('Laudo emitido com sucesso')
+        toast.dismiss('emitir-laudo')
+        toast.success('Laudo emitido com sucesso! PDF baixado.')
         fetchLaudo()
       } else {
+        toast.dismiss('emitir-laudo')
         toast.error(data.error || 'Erro ao emitir laudo')
       }
     } catch (error) {
+      toast.dismiss('emitir-laudo')
       toast.error('Erro ao conectar com o servidor')
     }
   }
@@ -553,36 +579,6 @@ export default function EditarLaudo() {
 
               {laudoPadronizado.status === 'emitido' && (
                 <>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const response = await fetch(`/api/emissor/laudos/${loteId}/pdf`)
-                        if (response.ok) {
-                          // Criar blob do PDF e fazer download
-                          const blob = await response.blob()
-                          const url = window.URL.createObjectURL(blob)
-                          const a = document.createElement('a')
-                          a.href = url
-                          a.download = `laudo-${lote?.codigo || loteId}-${Date.now()}.pdf`
-                          document.body.appendChild(a)
-                          a.click()
-                          document.body.removeChild(a)
-                          window.URL.revokeObjectURL(url)
-                          toast.success('PDF gerado e baixado com sucesso!')
-                        } else {
-                          const errorData = await response.json()
-                          console.error('Erro na API:', errorData)
-                          toast.error(errorData.error || 'Erro ao gerar PDF do laudo')
-                        }
-                      } catch (error) {
-                        console.error('Erro ao gerar PDF:', error)
-                        toast.error('Erro de conexão. Tente novamente.')
-                      }
-                    }}
-                    className="bg-green-600 text-white px-6 py-3 rounded-lg text-base font-semibold hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all shadow-md"
-                  >
-                    📄 Gerar PDF
-                  </button>
                   <button
                     onClick={handleEnviar}
                     className="bg-blue-600 text-white px-6 py-3 rounded-lg text-base font-semibold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all shadow-md"
