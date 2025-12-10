@@ -11,13 +11,13 @@ Você está vendo o erro **401 (Unauthorized)** ao acessar o deployment porque o
 ### **Opção 1: Desabilitar Deployment Protection**
 
 1. **Acesse o Dashboard do Vercel:**
+
    - https://vercel.com/ronaldofilardo/nr-bps-popup-clean/settings/deployment-protection
 
 2. **Desmarque "Vercel Authentication":**
    - Vá para **Settings > Deployment Protection**
    - Em **"Protection Settings"**, desabilite:
      - ❌ **Vercel Authentication** (desmarcar)
-   
 3. **Salve as alterações**
 
 4. **Aguarde o próximo deploy** ou force um redeploy:
@@ -25,10 +25,11 @@ Você está vendo o erro **401 (Unauthorized)** ao acessar o deployment porque o
    - Clique em "Redeploy" no último deployment
 
 ### **Resultado:**
+
 ✅ O erro 401 desaparecerá  
 ✅ O manifest.json será acessível  
 ✅ O PWA funcionará normalmente  
-✅ A aplicação ficará publicamente acessível  
+✅ A aplicação ficará publicamente acessível
 
 ---
 
@@ -37,10 +38,12 @@ Você está vendo o erro **401 (Unauthorized)** ao acessar o deployment porque o
 Se você quiser manter a proteção mas acessar temporariamente:
 
 1. **Obter Bypass Token:**
+
    - Acesse: https://vercel.com/ronaldofilardo/nr-bps-popup-clean/settings/deployment-protection
    - Copie o **Protection Bypass for Automation**
 
 2. **Usar URL com Bypass:**
+
    ```
    https://bps-o7e1c8icc-ronaldofilardos-projects.vercel.app?x-vercel-set-bypass-cookie=true&x-vercel-protection-bypass=SEU_TOKEN_AQUI
    ```
@@ -67,6 +70,7 @@ O domínio de produção **não tem essa proteção**:
 - Por padrão, o Vercel os protege com autenticação
 
 **URL Pattern:**
+
 - Preview: `https://bps-xxxxx-ronaldofilardos-projects.vercel.app`
 - Produção: `https://nr-bps-popup-clean.vercel.app`
 
@@ -75,12 +79,14 @@ O domínio de produção **não tem essa proteção**:
 ## 🔍 Identificando o Tipo de Deployment
 
 ### Preview (com proteção):
+
 ```
 https://bps-o7e1c8icc-ronaldofilardos-projects.vercel.app
               ↑ hash aleatório
 ```
 
 ### Produção (sem proteção):
+
 ```
 https://nr-bps-popup-clean.vercel.app
        ↑ nome do projeto
@@ -124,11 +130,13 @@ Arquivo `vercel.json` criado para otimizar o cache do manifest:
 ## 🐛 Se o Erro Persistir
 
 1. **Limpe o cache do navegador:**
+
    - Chrome: `Ctrl + Shift + Delete`
    - Selecione "Cookies e dados do site"
    - Limpe e recarregue
 
 2. **Teste em aba anônima:**
+
    - Chrome: `Ctrl + Shift + N`
    - Acesse a URL novamente
 
@@ -143,9 +151,10 @@ Arquivo `vercel.json` criado para otimizar o cache do manifest:
 **Para desenvolvimento e testes:**
 ✅ Desabilite Deployment Protection  
 ✅ Use o domínio de produção  
-✅ Mantenha o vercel.json configurado  
+✅ Mantenha o vercel.json configurado
 
 **Depois que tudo funcionar, você pode:**
+
 - Reativar a proteção apenas para preview deployments
 - Manter produção sempre pública
 
