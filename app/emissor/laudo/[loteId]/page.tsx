@@ -7,6 +7,7 @@ import { LaudoPadronizado } from '@/lib/laudo-tipos'
 
 interface Lote {
   id: number
+  codigo: string
   empresa_nome: string
   clinica_nome: string
 }
@@ -553,7 +554,31 @@ export default function EditarLaudo() {
               {laudoPadronizado.status === 'emitido' && (
                 <>
                   <button
-                    onClick={() => window.open(`/api/emissor/laudos/${loteId}/pdf`, '_blank')}
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(`/api/emissor/laudos/${loteId}/pdf`)
+                        if (response.ok) {
+                          // Criar blob do PDF e fazer download
+                          const blob = await response.blob()
+                          const url = window.URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = `laudo-${lote?.codigo || loteId}-${Date.now()}.pdf`
+                          document.body.appendChild(a)
+                          a.click()
+                          document.body.removeChild(a)
+                          window.URL.revokeObjectURL(url)
+                          toast.success('PDF gerado e baixado com sucesso!')
+                        } else {
+                          const errorData = await response.json()
+                          console.error('Erro na API:', errorData)
+                          toast.error(errorData.error || 'Erro ao gerar PDF do laudo')
+                        }
+                      } catch (error) {
+                        console.error('Erro ao gerar PDF:', error)
+                        toast.error('Erro de conexão. Tente novamente.')
+                      }
+                    }}
                     className="bg-green-600 text-white px-6 py-3 rounded-lg text-base font-semibold hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all shadow-md"
                   >
                     📄 Gerar PDF

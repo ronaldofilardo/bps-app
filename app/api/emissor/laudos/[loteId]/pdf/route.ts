@@ -700,6 +700,30 @@ export const GET = async (req: Request, { params }: { params: { loteId: string }
       return NextResponse.json({ error: "ID do lote inválido", success: false }, { status: 400 })
     }
 
+    // Verificar se lote existe e pertence à clínica do usuário
+    const loteCheck = await query(`
+      SELECT l.id, l.status as lote_status
+      FROM lotes_avaliacao l
+      WHERE l.id = $1 AND l.clinica_id = (SELECT clinica_id FROM funcionarios WHERE cpf = $2)
+    `, [loteId, user.cpf])
+
+    if (loteCheck.rows.length === 0) {
+      return NextResponse.json({ error: "Lote não encontrado ou acesso negado", success: false }, { status: 404 })
+    }
+
+    // Verificar se há laudo emitido para este lote
+    const laudoCheck = await query(`
+      SELECT id, status FROM laudos
+      WHERE lote_id = $1 AND emissor_cpf = $2 AND status = 'emitido'
+    `, [loteId, user.cpf])
+
+    if (laudoCheck.rows.length === 0) {
+      return NextResponse.json({
+        error: "Laudo não encontrado ou não está emitido. Emita o laudo antes de gerar o PDF.",
+        success: false
+      }, { status: 400 })
+    }
+
     // Gerar dados completos do laudo
     const dadosGeraisEmpresa = await gerarDadosGeraisEmpresa(loteId)
     const scoresPorGrupo = await calcularScoresPorGrupo(loteId)
@@ -771,10 +795,30 @@ export const GET = async (req: Request, { params }: { params: { loteId: string }
 
   } catch (error) {
     console.error('Erro ao gerar PDF do laudo:', error)
+
+    // Tratamento específico de erros comuns
+    let errorMessage = "Erro interno do servidor"
+    let statusCode = 500
+
+    if (error instanceof Error) {
+      if (error.message.includes('Browser has disconnected')) {
+        errorMessage = "Erro na geração do PDF: navegador desconectado"
+        statusCode = 503
+      } else if (error.message.includes('Page crashed')) {
+        errorMessage = "Erro na geração do PDF: página travou"
+        statusCode = 503
+      } else if (error.message.includes('Timeout')) {
+        errorMessage = "Erro na geração do PDF: tempo limite excedido"
+        statusCode = 504
+      } else {
+        errorMessage = `Erro na geração do PDF: ${error.message}`
+      }
+    }
+
     return NextResponse.json({
-      error: "Erro interno do servidor",
+      error: errorMessage,
       success: false,
       detalhes: error instanceof Error ? error.message : 'Erro desconhecido'
-    }, { status: 500 })
+    }, { status: statusCode })
   }
 }

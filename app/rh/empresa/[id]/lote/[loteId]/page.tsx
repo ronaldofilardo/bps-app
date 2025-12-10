@@ -191,7 +191,7 @@ export default function DetalhesLotePage() {
     if (!confirm(`Gerar relatório PDF do lote ${lote.codigo}?`)) return
 
     try {
-      const response = await fetch(`/api/avaliacao/relatorio-impressao?lote_id=${loteId}&empresa_id=${empresaId}&formato=pdf`)
+      const response = await fetch(`/api/avaliacao/relatorio-impressao?lote_id=${loteId}&empresa_id=${empresaId}&formato=json`)
 
       if (!response.ok) {
         const error = await response.json()
@@ -199,22 +199,16 @@ export default function DetalhesLotePage() {
         return
       }
 
-      const blob = await response.blob()
+      const dadosRelatorio = await response.json()
       
-      if (blob.size === 0) {
-        alert('O relatório gerado está vazio. Verifique se há dados para o lote.')
+      if (!dadosRelatorio.avaliacoes || dadosRelatorio.avaliacoes.length === 0) {
+        alert('O relatório não possui dados. Verifique se há avaliações concluídas para o lote.')
         return
       }
 
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      const nomeArquivo = `relatorio-avaliacoes-${lote.empresa_nome.replace(/[^a-z0-9]/gi, '_')}-lote-${lote.codigo}.pdf`
-      a.download = nomeArquivo
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      // Importar e usar geração client-side
+      const { gerarRelatorioLotePDF } = await import('@/lib/pdf-relatorio-generator')
+      gerarRelatorioLotePDF(dadosRelatorio)
     } catch (error) {
       console.error('Erro ao gerar relatório:', error)
       alert('Erro ao gerar relatório: ' + (error instanceof Error ? error.message : 'Erro desconhecido'))
@@ -225,7 +219,7 @@ export default function DetalhesLotePage() {
     if (!confirm(`Gerar relatório PDF de ${nome}?`)) return
 
     try {
-      const response = await fetch(`/api/avaliacao/relatorio-impressao?lote_id=${loteId}&empresa_id=${empresaId}&cpf_filter=${cpf}&formato=pdf`)
+      const response = await fetch(`/api/avaliacao/relatorio-impressao?lote_id=${loteId}&empresa_id=${empresaId}&cpf_filter=${cpf}&formato=json`)
 
       if (!response.ok) {
         const error = await response.json()
@@ -233,22 +227,31 @@ export default function DetalhesLotePage() {
         return
       }
 
-      const blob = await response.blob()
+      const dadosRelatorio = await response.json()
       
-      if (blob.size === 0) {
-        alert('O relatório gerado está vazio. Verifique se o funcionário possui avaliação concluída.')
+      if (!dadosRelatorio.avaliacoes || dadosRelatorio.avaliacoes.length === 0) {
+        alert('O relatório não possui dados. Verifique se o funcionário possui avaliação concluída.')
         return
       }
 
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      const nomeArquivo = `relatorio-${nome.replace(/[^a-z0-9]/gi, '_')}-${cpf}.pdf`
-      a.download = nomeArquivo
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      // Buscar dados do funcionário
+      const avaliacao = dadosRelatorio.avaliacoes[0]
+      
+      // Importar e usar geração client-side
+      const { gerarRelatorioFuncionarioPDF } = await import('@/lib/pdf-relatorio-generator')
+      gerarRelatorioFuncionarioPDF(
+        {
+          nome: avaliacao.funcionario.nome,
+          cpf: avaliacao.funcionario.cpf,
+          perfil: avaliacao.funcionario.perfil,
+          empresa: dadosRelatorio.empresa,
+          setor: avaliacao.funcionario.setor,
+          funcao: avaliacao.funcionario.funcao,
+          matricula: avaliacao.funcionario.matricula,
+          lote: dadosRelatorio.lote
+        },
+        avaliacao.grupos
+      )
     } catch (error) {
       console.error('Erro ao gerar relatório:', error)
       alert('Erro ao gerar relatório: ' + (error instanceof Error ? error.message : 'Erro desconhecido'))

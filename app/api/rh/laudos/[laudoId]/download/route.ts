@@ -40,7 +40,7 @@ export const GET = async (req: Request, { params }: { params: { laudoId: string 
 
     // Verificar se o usuário tem acesso (mesma clínica)
     const userClinicaQuery = await query(`
-      SELECT clinica_id FROM usuarios WHERE cpf = $1
+      SELECT clinica_id FROM funcionarios WHERE cpf = $1
     `, [user.cpf])
 
     if (userClinicaQuery.rows[0].clinica_id !== laudo.clinica_id) {

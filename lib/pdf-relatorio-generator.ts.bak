@@ -1,0 +1,609 @@
+import jsPDF from 'jspdf';
+import { applyPlugin } from 'jspdf-autotable';
+
+// Apply the autoTable plugin to jsPDF
+applyPlugin(jsPDF);
+
+// Extend jsPDF with autoTable plugin
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+    lastAutoTable?: {
+      finalY: number;
+    };
+  }
+}
+
+export interface RelatorioData {
+  empresa: string;
+  lote?: {
+    id: string | number;
+    codigo: string;
+    titulo: string;
+  };
+  data?: string;
+  total_avaliacoes: number;
+  avaliacoes: Array<{
+    id: number;
+    funcionario: {
+      cpf: string;
+      nome: string;
+      perfil: string;
+    };
+    envio: string;
+    grupos: Array<{
+      id: number;
+      titulo: string;
+      dominio: string;
+      media: string;
+      classificacao: string;
+      corClassificacao: string;
+      respostas: Array<{
+        item: string;
+        valor: number;
+        texto: string;
+      }>;
+    }>;
+  }>;
+}
+
+export interface DadosFuncionario {
+  nome: string;
+  cpf: string;
+  perfil: string;
+  empresa: string;
+  lote?: {
+    id: string | number;
+    codigo: string;
+    titulo: string;
+  };
+}
+
+export interface Grupo {
+  id: number;
+  titulo: string;
+  dominio: string;
+  media: string;
+  classificacao: string;
+  corClassificacao: string;
+  respostas: Array<{
+    item: string;
+    valor: number;
+    texto: string;
+  }>;
+}
+
+// Mapeamento de valores para texto de frequência
+const frequenciaMap: { [key: number]: string } = {
+  0: 'Nunca',
+  25: 'Raramente',
+  50: 'Às vezes',
+  75: 'Muitas vezes',
+  100: 'Sempre'
+};
+
+// Função auxiliar para desenhar um grupo no relatório
+function desenharGrupo(doc: jsPDF, grupo: Grupo, x: number, y: number, width: number): number {
+  const margemInterna = 2;
+  const alturaCabecalho = 12;
+  const espacoEntreLinhas = 5;
+  
+  // Definir cor baseada na classificação
+  let corClassificacao: [number, number, number] = [0, 0, 0];
+  let textoClassificacao = grupo.classificacao;
+  
+  if (grupo.classificacao.includes('Excelente') || grupo.classificacao.includes('Baixo Risco')) {
+    corClassificacao = [34, 197, 94]; // Verde
+    textoClassificacao = 'Excelente (Baixo Risco)';
+  } else if (grupo.classificacao.includes('Monitorar') || grupo.classificacao.includes('Médio Risco')) {
+    corClassificacao = [251, 146, 60]; // Laranja
+    textoClassificacao = 'Monitorar (Médio Risco)';
+  } else if (grupo.classificacao.includes('Atenção') || grupo.classificacao.includes('Alto Risco')) {
+    corClassificacao = [239, 68, 68]; // Vermelho
+    textoClassificacao = 'Atenção (Alto Risco)';
+  }
+  
+  // Desenhar borda do grupo
+  doc.setDrawColor(200, 200, 200);
+  doc.setLineWidth(0.3);
+  
+  let alturaAtual = y;
+  
+  // Cabeçalho do grupo
+  doc.setFillColor(245, 245, 245);
+  doc.rect(x, alturaAtual, width, alturaCabecalho, 'FD');
+  
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 0, 0);
+  doc.text(grupo.titulo, x + margemInterna, alturaAtual + 4);
+  
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(corClassificacao[0], corClassificacao[1], corClassificacao[2]);
+  doc.text(`Classificação de risco: ${textoClassificacao}`, x + margemInterna, alturaAtual + 9);
+  
+  alturaAtual += alturaCabecalho;
+  
+  // Desenhar perguntas e respostas
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  
+  grupo.respostas.forEach((resposta, idx) => {
+    const textoFrequencia = frequenciaMap[resposta.valor] || resposta.valor.toString();
+    const corFrequencia = resposta.valor === 0 ? [34, 197, 94] : 
+                          resposta.valor === 25 ? [34, 197, 94] :
+                          resposta.valor === 50 ? [251, 146, 60] :
+                          resposta.valor === 75 ? [34, 197, 94] :
+                          [34, 197, 94]; // Verde para "Sempre"
+    
+    // Fundo alternado para melhor legibilidade
+    if (idx % 2 === 0) {
+      doc.setFillColor(250, 250, 250);
+      doc.rect(x, alturaAtual, width, espacoEntreLinhas, 'F');
+    }
+    
+    // Texto da pergunta
+    doc.setTextColor(0, 0, 0);
+    const textoPergunta = doc.splitTextToSize(resposta.texto, width - 20);
+    doc.text(textoPergunta, x + margemInterna, alturaAtual + 3.5);
+    
+    // Resposta com cor
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(corFrequencia[0], corFrequencia[1], corFrequencia[2]);
+    doc.text(textoFrequencia, x + width - 15, alturaAtual + 3.5);
+    
+    // Valor numérico
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 100);
+    doc.text(resposta.valor.toString(), x + width - 5, alturaAtual + 3.5, { align: 'right' });
+    
+    doc.setFont('helvetica', 'normal');
+    alturaAtual += espacoEntreLinhas * textoPergunta.length;
+  });
+  
+  // Borda final do grupo
+  const alturaTotal = alturaAtual - y;
+  doc.setDrawColor(200, 200, 200);
+  doc.rect(x, y, width, alturaTotal);
+  
+  return alturaAtual;
+}
+
+// Função para gerar relatório individual seguindo o modelo da imagem
+export function gerarRelatorioFuncionarioPDF(
+  dadosFuncionario: DadosFuncionario,
+  grupos: Grupo[]
+): void {
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margemLateral = 10;
+  const larguraColunaGrupo = (pageWidth - margemLateral * 3) / 2;
+  
+  let yPosition = 15;
+
+  // ===== CABEÇALHO =====
+  doc.setFillColor(240, 240, 240);
+  doc.roundedRect(margemLateral, yPosition, pageWidth - margemLateral * 2, 22, 2, 2, 'F');
+  
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 0, 0);
+  doc.text('Detalhes da Avaliação - ' + dadosFuncionario.nome, margemLateral + 3, yPosition + 5);
+  
+  yPosition += 8;
+  
+  // Linha com informações
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  
+  // Nº avaliação (vamos usar parte do CPF como ID)
+  const numeroAvaliacao = dadosFuncionario.cpf.substring(0, 3);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Nº', margemLateral + 3, yPosition);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(0, 0, 0);
+  doc.text(numeroAvaliacao, margemLateral + 10, yPosition);
+  
+  // CPF
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(100, 100, 255);
+  doc.text('CPF:', margemLateral + 25, yPosition);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(100, 100, 255);
+  const cpfFormatado = dadosFuncionario.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  doc.text(cpfFormatado, margemLateral + 35, yPosition);
+  
+  // Perfil (gestao)
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 0, 0);
+  doc.text('gestao', margemLateral + 75, yPosition);
+  
+  // Data de conclusão
+  doc.setFont('helvetica', 'bold');
+  doc.text('Concluída em:', margemLateral + 120, yPosition);
+  doc.setFont('helvetica', 'normal');
+  const dataAtual = new Date().toLocaleDateString('pt-BR', { 
+    day: '2-digit', 
+    month: '2-digit', 
+    year: 'numeric' 
+  });
+  const horaAtual = new Date().toLocaleTimeString('pt-BR', { 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  });
+  doc.text(`${dataAtual} ${horaAtual}`, margemLateral + 150, yPosition);
+  
+  yPosition += 10;
+  
+  // ===== GRUPOS EM 2 COLUNAS =====
+  const gruposOrdenados = [...grupos].sort((a, b) => a.id - b.id);
+  const gruposPorPagina = 6;
+  
+  for (let i = 0; i < gruposOrdenados.length; i += gruposPorPagina) {
+    if (i > 0) {
+      doc.addPage();
+      yPosition = 15;
+    }
+    
+    const gruposNestaPagina = gruposOrdenados.slice(i, i + gruposPorPagina);
+    const gruposColuna1 = gruposNestaPagina.slice(0, 3);
+    const gruposColuna2 = gruposNestaPagina.slice(3, 6);
+    
+    let yColuna1 = yPosition;
+    let yColuna2 = yPosition;
+    
+    // Coluna 1 (esquerda)
+    gruposColuna1.forEach((grupo) => {
+      yColuna1 = desenharGrupo(doc, grupo, margemLateral, yColuna1, larguraColunaGrupo) + 5;
+    });
+    
+    // Coluna 2 (direita)
+    gruposColuna2.forEach((grupo) => {
+      yColuna2 = desenharGrupo(doc, grupo, margemLateral * 2 + larguraColunaGrupo, yColuna2, larguraColunaGrupo) + 5;
+    });
+  }
+
+  // Footer com número de página
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(150);
+    doc.text(
+      `Página ${i} de ${totalPages}`,
+      pageWidth / 2,
+      pageHeight - 10,
+      { align: 'center' }
+    );
+  }
+
+  // Download
+  const nomeArquivo = `relatorio-${dadosFuncionario.nome.replace(/\s+/g, '-').toLowerCase()}.pdf`;
+  doc.save(nomeArquivo);
+}
+
+// Função para gerar relatório do lote (conjunto de relatórios individuais)
+export function gerarRelatorioLotePDF(dados: RelatorioData): void {
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margemLateral = 10;
+  const larguraColunaGrupo = (pageWidth - margemLateral * 3) / 2;
+
+  dados.avaliacoes.forEach((avaliacao, indexAvaliacao) => {
+    if (indexAvaliacao > 0) {
+      doc.addPage();
+    }
+
+    let yPosition = 15;
+
+    // ===== CABEÇALHO =====
+    doc.setFillColor(240, 240, 240);
+    doc.roundedRect(margemLateral, yPosition, pageWidth - margemLateral * 2, 22, 2, 2, 'F');
+    
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 0, 0);
+    doc.text('Detalhes da Avaliação - ' + avaliacao.funcionario.nome, margemLateral + 3, yPosition + 5);
+    
+    yPosition += 8;
+    
+    // Linha com informações
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    
+    // Nº avaliação
+    const numeroAvaliacao = avaliacao.id.toString();
+    doc.setFont('helvetica', 'bold');
+    doc.text('Nº', margemLateral + 3, yPosition);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 0, 0);
+    doc.text(numeroAvaliacao, margemLateral + 10, yPosition);
+    
+    // CPF
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(100, 100, 255);
+    doc.text('CPF:', margemLateral + 25, yPosition);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 255);
+    const cpfFormatado = avaliacao.funcionario.cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+    doc.text(cpfFormatado, margemLateral + 35, yPosition);
+    
+    // Perfil (gestao)
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 0, 0);
+    doc.text('gestao', margemLateral + 75, yPosition);
+    
+    // Data de conclusão
+    doc.setFont('helvetica', 'bold');
+    doc.text('Concluída em:', margemLateral + 120, yPosition);
+    doc.setFont('helvetica', 'normal');
+    const dataConclusao = new Date(avaliacao.envio).toLocaleDateString('pt-BR', { 
+      day: '2-digit', 
+      month: '2-digit', 
+      year: 'numeric' 
+    });
+    const horaConclusao = new Date(avaliacao.envio).toLocaleTimeString('pt-BR', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+    doc.text(`${dataConclusao} ${horaConclusao}`, margemLateral + 150, yPosition);
+    
+    yPosition += 10;
+    
+    // ===== GRUPOS EM 2 COLUNAS =====
+    const gruposOrdenados = [...avaliacao.grupos].sort((a, b) => a.id - b.id);
+    const gruposPorPagina = 6;
+    
+    for (let i = 0; i < gruposOrdenados.length; i += gruposPorPagina) {
+      if (i > 0) {
+        doc.addPage();
+        yPosition = 15;
+      }
+      
+      const gruposNestaPagina = gruposOrdenados.slice(i, i + gruposPorPagina);
+      const gruposColuna1 = gruposNestaPagina.slice(0, 3);
+      const gruposColuna2 = gruposNestaPagina.slice(3, 6);
+      
+      let yColuna1 = yPosition;
+      let yColuna2 = yPosition;
+      
+      // Coluna 1 (esquerda)
+      gruposColuna1.forEach((grupo) => {
+        yColuna1 = desenharGrupo(doc, grupo, margemLateral, yColuna1, larguraColunaGrupo) + 5;
+      });
+      
+      // Coluna 2 (direita)
+      gruposColuna2.forEach((grupo) => {
+        yColuna2 = desenharGrupo(doc, grupo, margemLateral * 2 + larguraColunaGrupo, yColuna2, larguraColunaGrupo) + 5;
+      });
+    }
+  });
+
+  // Footer com número de página
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(150);
+    doc.text(
+      `Página ${i} de ${totalPages}`,
+      pageWidth / 2,
+      pageHeight - 10,
+      { align: 'center' }
+    );
+  }
+
+  // Download
+  const nomeArquivo = `relatorio-lote-${dados.lote?.codigo || 'geral'}.pdf`;
+  doc.save(nomeArquivo);
+}
+
+    doc.text(`CPF: ${avaliacao.funcionario.cpf} | Perfil: ${avaliacao.funcionario.perfil}`, 14, yPosition);
+    yPosition += 7;
+
+    // Tabela de grupos
+    const tableData = avaliacao.grupos.map(grupo => [
+      grupo.titulo,
+      grupo.media,
+      grupo.classificacao
+    ]);
+
+    doc.autoTable({
+      startY: yPosition,
+      head: [['Grupo/Dimensão', 'Média', 'Classificação']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+      styles: { fontSize: 9, cellPadding: 3 },
+      columnStyles: {
+        0: { cellWidth: 80 },
+        1: { cellWidth: 25, halign: 'center' },
+        2: { cellWidth: 65, halign: 'center' }
+      },
+      didParseCell: function(data: any) {
+        if (data.section === 'body' && data.column.index === 2) {
+          const classificacao = data.cell.raw as string;
+          if (classificacao.includes('Baixo Risco')) {
+            data.cell.styles.textColor = [16, 185, 129]; // green
+          } else if (classificacao.includes('Médio Risco')) {
+            data.cell.styles.textColor = [245, 158, 11]; // amber
+          } else if (classificacao.includes('Alto Risco')) {
+            data.cell.styles.textColor = [239, 68, 68]; // red
+          }
+        }
+      }
+    });
+
+    yPosition = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 10 : yPosition + 50;
+  });
+
+  // Footer em todas as páginas
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(150);
+    doc.text(
+      `Página ${i} de ${totalPages} - Gerado em ${new Date().toLocaleString('pt-BR')}`,
+      pageWidth / 2,
+      pageHeight - 10,
+      { align: 'center' }
+    );
+  }
+
+  // Download do PDF
+  const nomeArquivo = dados.lote
+    ? `relatorio-${dados.lote.codigo}-${dados.empresa.replace(/\s+/g, '-')}.pdf`
+    : `relatorio-${dados.empresa.replace(/\s+/g, '-')}-${dados.data}.pdf`;
+
+  doc.save(nomeArquivo);
+}
+
+export function gerarRelatorioFuncionarioPDF(
+  dadosFuncionario: {
+    nome: string;
+    cpf: string;
+    perfil: string;
+    empresa: string;
+    lote?: { codigo: string; titulo: string };
+  },
+  grupos: RelatorioData['avaliacoes'][0]['grupos']
+): void {
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  let yPosition = 20;
+
+  // Header
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Relatório Individual - COPSOQ', pageWidth / 2, yPosition, { align: 'center' });
+  yPosition += 10;
+
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Funcionário: ${dadosFuncionario.nome}`, 14, yPosition);
+  yPosition += 7;
+  doc.text(`CPF: ${dadosFuncionario.cpf}`, 14, yPosition);
+  yPosition += 7;
+  doc.text(`Empresa: ${dadosFuncionario.empresa}`, 14, yPosition);
+  yPosition += 7;
+
+  if (dadosFuncionario.lote) {
+    doc.text(`Lote: ${dadosFuncionario.lote.codigo} - ${dadosFuncionario.lote.titulo}`, 14, yPosition);
+    yPosition += 7;
+  }
+
+  yPosition += 5;
+
+  // Linha separadora
+  doc.setDrawColor(200, 200, 200);
+  doc.line(14, yPosition, pageWidth - 14, yPosition);
+  yPosition += 10;
+
+  // Resumo dos Grupos
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Resumo por Dimensão', 14, yPosition);
+  yPosition += 8;
+
+  const tableData = grupos.map(grupo => [
+    grupo.titulo,
+    grupo.dominio,
+    grupo.media,
+    grupo.classificacao
+  ]);
+
+  doc.autoTable({
+    startY: yPosition,
+    head: [['Dimensão', 'Domínio', 'Média', 'Classificação']],
+    body: tableData,
+    theme: 'grid',
+    headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+    styles: { fontSize: 9, cellPadding: 3 },
+    columnStyles: {
+      0: { cellWidth: 50 },
+      1: { cellWidth: 45 },
+      2: { cellWidth: 20, halign: 'center' },
+      3: { cellWidth: 55, halign: 'center' }
+    },
+    didParseCell: function(data: any) {
+      if (data.section === 'body' && data.column.index === 3) {
+        const classificacao = data.cell.raw as string;
+        if (classificacao.includes('Baixo Risco')) {
+          data.cell.styles.textColor = [16, 185, 129]; // green
+        } else if (classificacao.includes('Médio Risco')) {
+          data.cell.styles.textColor = [245, 158, 11]; // amber
+        } else if (classificacao.includes('Alto Risco')) {
+          data.cell.styles.textColor = [239, 68, 68]; // red
+        }
+      }
+    }
+  });
+
+  yPosition = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 15 : yPosition + 80;
+
+  // Detalhamento de cada grupo
+  grupos.forEach((grupo, index) => {
+    if (yPosition > pageHeight - 80) {
+      doc.addPage();
+      yPosition = 20;
+    }
+
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${grupo.titulo} (${grupo.dominio})`, 14, yPosition);
+    yPosition += 7;
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Média: ${grupo.media} - ${grupo.classificacao}`, 14, yPosition);
+    yPosition += 10;
+
+    // Tabela de respostas
+    const respostasData = grupo.respostas.map(resposta => [
+      resposta.texto,
+      resposta.valor.toString()
+    ]);
+
+    doc.autoTable({
+      startY: yPosition,
+      head: [['Questão', 'Valor']],
+      body: respostasData,
+      theme: 'striped',
+      headStyles: { fillColor: [71, 85, 105], textColor: 255, fontSize: 9 },
+      styles: { fontSize: 8, cellPadding: 2 },
+      columnStyles: {
+        0: { cellWidth: 150 },
+        1: { cellWidth: 20, halign: 'center' }
+      }
+    });
+
+    yPosition = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 12 : yPosition + 50;
+  });
+
+  // Footer
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(150);
+    doc.text(
+      `Página ${i} de ${totalPages} - Gerado em ${new Date().toLocaleString('pt-BR')}`,
+      pageWidth / 2,
+      pageHeight - 10,
+      { align: 'center' }
+    );
+  }
+
+  // Download
+  const nomeArquivo = `relatorio-individual-${dadosFuncionario.nome.replace(/\s+/g, '-')}.pdf`;
+  doc.save(nomeArquivo);
+}

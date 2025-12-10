@@ -78,6 +78,18 @@ describe('/api/emissor/laudos/[loteId]/pdf', () => {
     it('deve gerar PDF com sucesso para lote válido', async () => {
       mockRequireRole.mockResolvedValue(mockEmissor)
 
+      // Mock verificação de lote e clínica
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: 1, lote_status: 'ativo' }],
+        rowCount: 1,
+      } as any)
+
+      // Mock verificação de laudo emitido
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: 1, status: 'emitido' }],
+        rowCount: 1,
+      } as any)
+
       // Mock dados da empresa
       mockQuery.mockResolvedValueOnce({
         rows: [{
@@ -115,7 +127,7 @@ describe('/api/emissor/laudos/[loteId]/pdf', () => {
         rowCount: 2,
       } as any)
 
-      // Mock laudo
+      // Mock observações do laudo
       mockQuery.mockResolvedValueOnce({
         rows: [{ observacoes: 'Observações de teste' }],
         rowCount: 1,
@@ -142,7 +154,7 @@ describe('/api/emissor/laudos/[loteId]/pdf', () => {
 
       expect(response.status).toBe(500)
       expect(data.success).toBe(false)
-      expect(data.error).toBe('Erro interno do servidor')
+      expect(data.error).toBe('Erro na geração do PDF: Database error')
     })
   })
 

@@ -104,7 +104,6 @@ export default function EmpresaDashboardPage() {
   const params = useParams()
   const empresaId = params.id as string
   const [modalFuncionario, setModalFuncionario] = useState<Funcionario | null>(null)
-  const [gerandoRelatorioLote, setGerandoRelatorioLote] = useState<number | null>(null)
   const [showLiberarLoteModal, setShowLiberarLoteModal] = useState(false)
   const [tipoLote, setTipoLote] = useState<'completo' | 'operacional' | 'gestao'>('completo')
   const [tituloLote, setTituloLote] = useState('')
@@ -248,23 +247,19 @@ export default function EmpresaDashboardPage() {
   const handleDownloadLaudo = async (laudo: Laudo) => {
     try {
       setDownloadingLaudo(laudo.id)
-      const response = await fetch(`/api/rh/laudos/${laudo.id}/download`)
+      const response = await fetch(`/api/emissor/laudos/${laudo.lote_id}/data`)
 
       if (!response.ok) {
         const errorData = await response.json()
-        alert(`Erro ao baixar laudo: ${errorData.error}`)
+        alert(`Erro ao buscar dados do laudo: ${errorData.error}`)
         return
       }
 
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `laudo-${laudo.codigo}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      const dadosLaudo = await response.json()
+      
+      // Importar e usar geração client-side
+      const { gerarLaudoPDF } = await import('@/lib/pdf-laudo-generator')
+      await gerarLaudoPDF(dadosLaudo, `laudo-${laudo.codigo}.pdf`)
     } catch (error) {
       console.error('Erro ao fazer download:', error)
       alert('Erro ao fazer download do laudo')
@@ -301,36 +296,6 @@ export default function EmpresaDashboardPage() {
       console.error('Erro ao carregar dados:', error)
     } finally {
       setLoading(false)
-    }
-  }
-
-
-
-  const gerarRelatorioLote = async (loteId: number, loteCodigo: string) => {
-    if (!confirm(`Gerar relatório PDF do lote ${loteCodigo}?`)) return
-
-    setGerandoRelatorioLote(loteId)
-    try {
-      const response = await fetch(`/api/avaliacao/relatorio-impressao?lote_id=${loteId}&empresa_id=${empresaId}&formato=pdf`)
-
-      if (response.ok) {
-        const blob = await response.blob()
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `relatorio-avaliacoes-${empresa?.nome || 'empresa'}-lote-${loteCodigo}.pdf`
-        document.body.appendChild(a)
-        a.click()
-        window.URL.revokeObjectURL(url)
-        document.body.removeChild(a)
-      } else {
-        const error = await response.json()
-        alert('Erro ao gerar relatório: ' + error.error)
-      }
-    } catch (error) {
-      alert('Erro ao gerar relatório: ' + error)
-    } finally {
-      setGerandoRelatorioLote(null)
     }
   }
 
@@ -834,17 +799,6 @@ export default function EmpresaDashboardPage() {
                             </span>
                           </div>
                         </div>
-
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            gerarRelatorioLote(lote.id, lote.codigo)
-                          }}
-                          disabled={!isPronto || gerandoRelatorioLote === lote.id}
-                          className="w-full bg-green-600 text-white px-3 py-2 rounded text-sm hover:bg-green-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed mb-2"
-                        >
-                          {gerandoRelatorioLote === lote.id ? 'Gerando...' : '📊 Gerar Relatório PDF'}
-                        </button>
 
                         <button
                           onClick={(e) => {

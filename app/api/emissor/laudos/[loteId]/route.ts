@@ -21,14 +21,14 @@ export const GET = async (req: Request, { params }: { params: { loteId: string }
 
     // Verificar se o lote existe e está pronto
     const loteCheck = await query(`
-      SELECT la.id, la.status, ec.nome as empresa_nome, c.nome as clinica_nome,
+      SELECT la.id, la.codigo, la.status, ec.nome as empresa_nome, c.nome as clinica_nome,
              COUNT(a.id) as total, COUNT(CASE WHEN a.status = 'concluida' THEN 1 END) as concluidas
       FROM lotes_avaliacao la
       JOIN empresas_clientes ec ON la.empresa_id = ec.id
       JOIN clinicas c ON ec.clinica_id = c.id
       LEFT JOIN avaliacoes a ON la.id = a.lote_id
       WHERE la.id = $1 AND la.status != 'cancelado'
-      GROUP BY la.id, la.status, ec.nome, c.nome
+      GROUP BY la.id, la.codigo, la.status, ec.nome, c.nome
     `, [loteId])
 
     if (loteCheck.rows.length === 0) {
@@ -91,6 +91,7 @@ export const GET = async (req: Request, { params }: { params: { loteId: string }
       success: true,
       lote: {
         id: lote.id,
+        codigo: lote.codigo,
         empresa_nome: lote.empresa_nome,
         clinica_nome: lote.clinica_nome
       },

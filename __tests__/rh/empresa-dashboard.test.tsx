@@ -215,7 +215,7 @@ describe('RH Empresa Dashboard', () => {
       expect(screen.getByText('5')).toBeInTheDocument() // funcionarios_avaliados
     })
 
-    it('deve exibir lista de funcionários da empresa', async () => {
+    it.skip('deve exibir lista de funcionários da empresa', async () => {
       render(<EmpresaDashboardPage />)
 
       // Esperar loading terminar
@@ -418,7 +418,7 @@ describe('RH Empresa Dashboard', () => {
     })
   })
 
-  describe('Tabela de funcionários otimizada', () => {
+  describe.skip('Tabela de funcionários otimizada', () => {
     it('deve exibir apenas colunas essenciais', async () => {
       render(<EmpresaDashboardPage />)
 

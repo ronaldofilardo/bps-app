@@ -88,7 +88,10 @@ export async function GET(request: NextRequest) {
         f.cpf,
         f.nome,
         f.perfil,
-        f.nivel_cargo
+        f.nivel_cargo,
+        f.setor,
+        f.funcao,
+        f.matricula
       FROM avaliacoes a
       JOIN funcionarios f ON a.funcionario_cpf = f.cpf
       WHERE ${whereClause}
@@ -208,7 +211,10 @@ export async function GET(request: NextRequest) {
           funcionario: {
             cpf: avaliacao.cpf,
             nome: avaliacao.nome,
-            perfil: avaliacao.nivel_cargo === 'gestao' ? 'gestao' : 'operacional'
+            perfil: avaliacao.nivel_cargo === 'gestao' ? 'gestao' : 'operacional',
+            setor: avaliacao.setor,
+            funcao: avaliacao.funcao,
+            matricula: avaliacao.matricula
           },
           envio: avaliacao.envio,
           grupos: gruposComRespostas
